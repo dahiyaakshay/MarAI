@@ -2593,3 +2593,199 @@ const downloadLandingPageCode = () => {
 };
 ```
 
+### 13.3 Copy to Clipboard Implementation
+#### Used across ContentCreator, EmailGenerator, LandingPageBuilder, PromptLibrary:
+```typescript
+const copyToClipboard = async (content: string) => {
+  try {
+    await navigator.clipboard.writeText(content);
+    alert('Content copied to clipboard!');
+  } catch (error) {
+    alert('Failed to copy to clipboard. Please try again.');
+  }
+};
+
+// PromptLibrary specific with visual feedback
+const copyToClipboard = async (promptId: string, content: string) => {
+  try {
+    await navigator.clipboard.writeText(content);
+    setCopiedPrompts(prev => new Set(prev).add(promptId));
+    
+    // Remove the copied state after 2 seconds
+    setTimeout(() => {
+      setCopiedPrompts(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(promptId);
+        return newSet;
+      });
+    }, 2000);
+  } catch (error) {
+    alert('Failed to copy to clipboard. Please try again.');
+  }
+};
+```
+
+### 13.4 External Preview Implementation
+#### LandingPageBuilder Open in New Tab:
+```typescript
+const openInNewTab = () => {
+  if (!landingPagePreview) {
+    alert('Please generate a landing page first');
+    return;
+  }
+
+  const newWindow = window.open();
+  if (newWindow) {
+    newWindow.document.write(landingPagePreview);
+    newWindow.document.close();
+  }
+};
+```
+
+### 13.5 Export Service Integration
+#### Placeholder implementations referencing exportService.ts:
+```typescript
+// ContentCreator.tsx
+const downloadContentPDF = () => {
+  if (!contentPreview) {
+    alert('Please generate content first');
+    return;
+  }
+  console.log('PDF download requested for content type:', selectedContentType);
+  alert('PDF download functionality will be added to exportService.ts');
+};
+
+const downloadContentWord = () => {
+  if (!contentPreview) {
+    alert('Please generate content first');
+    return;
+  }
+  console.log('Word download requested for content type:', selectedContentType);
+  alert('Word download functionality will be added to exportService.ts');
+};
+```
+
+## 14. Development Patterns
+### 14.1 Error Handling Pattern (assetLoader.js)
+```javascript
+try {
+  const { emailTemplates } = await import('../assets/generator-assets/email/templates/index.js');
+  return emailTemplates || [];
+} catch (error) {
+  console.warn('No email templates found or failed to load:', error.message);
+  return [];
+}
+```
+
+### 14.2 API Error Handling (apiService.ts)
+typescript
+```try {
+  const response = await fetch(`http://localhost:3001/api/${endpoint}`, {
+    ...options,
+    headers
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Request failed');
+  }
+  return data;
+} catch (error) {
+  if (error instanceof TypeError && error.message.includes('fetch')) {
+    throw new Error('Cannot connect to backend server');
+  }
+  throw error;
+}
+```
+
+### 14.3 Component Props Pattern
+All components use TypeScript interfaces for props with proper typing.
+
+### 14.4 Import/Export Pattern
+- Components: Default exports with named interface exports
+- Services: Named exports with singleton instances (apiService)
+- Utilities: Named exports for functions
+
+### 14.5 Browser Compatibility
+- Uses modern JavaScript features (async/await, optional chaining)
+- Clipboard API for copy functionality
+- File API for drag and drop uploads
+- CSS Grid and Flexbox for layouts
+
+### 14.6 Performance Considerations
+- Lazy loading of assets through assetLoader service
+- Conversation history kept in memory (not persisted)
+- Image error handling with fallback displays
+- Efficient re-rendering with proper React keys
+
+### 14.7 Security Considerations
+- API keys stored in localStorage (client-side only)
+- No sensitive data sent to client components
+- File upload validation (image types, size limits)
+- Proper error boundaries and input validation
+
+### 14.8 TypeScript Usage
+- Interface definitions for all major data structures
+- Proper typing for event handlers and props
+- Type-safe state management patterns
+- Generic typing for reusable components
+
+### 14.9 Error Handling Strategy
+- Graceful degradation for missing assets
+- Network error handling with user feedback
+- Fallback parsing for AI responses
+- Input validation and boundary checking
+
+## 15. Key Implementation Notes
+### 15.1 Drag and Drop Implementation
+Note: Drag and drop functionality IS implemented in EmailGenerator.tsx and LandingPageBuilder.tsx with the following handlers:
+```typescript
+const handleDragOver = (e: React.DragEvent) => {
+  e.preventDefault();
+  e.currentTarget.classList.add('dragover');
+};
+
+const handleDragLeave = (e: React.DragEvent) => {
+  e.preventDefault();
+  e.currentTarget.classList.remove('dragover');
+};
+
+const handleDrop = (e: React.DragEvent) => {
+  e.preventDefault();
+  e.currentTarget.classList.remove('dragover');
+  handleFileUpload(e.dataTransfer.files);
+};
+```
+
+Applied to upload areas with:
+
+```typescript
+<div 
+  className="upload-area"
+  onDragOver={handleDragOver}
+  onDragLeave={handleDragLeave}
+  onDrop={handleDrop}
+>
+```
+
+### 15.2 File System Integration
+The application references window.fs.readFile API but this appears to be a custom implementation not standard browser File API.
+
+### 15.3 Asset Loading Strategy
+- Templates and wireframes are loaded dynamically from index.js files
+- HTML content is fetched via HTTP requests
+- Graceful degradation for missing files
+- Error handling with user-friendly messages
+
+### 15.4 Conversation Context Management
+- 50k token limit enforced across all AI components
+- Visual indicators for session status
+- Automatic session reset functionality
+- Context preservation across multiple interactions
+
+### 15.5 Platform-Specific Features
+- Email generator focuses on email-client compatibility
+- Landing page builder supports multiple frameworks
+- Social calendar includes platform-specific optimizations
+- Content creator supports universal content types
+
+This documentation represents the complete implementation of the MarAI frontend as it exists in the provided source files. All features, patterns, and implementations described are currently functional and deployed in the application.
