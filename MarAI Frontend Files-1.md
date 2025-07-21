@@ -884,7 +884,7 @@ const getDaysInMonth = () => {
 ```
 
 ### 6.3 EmailGenerator.tsx
-Purpose: Email creation with template/wireframe system and file uploads
+Purpose: Email creation with template/wireframe system
 #### Tab System:
 ```typescript
 const [activeTab, setActiveTab] = useState('create-email');
@@ -896,40 +896,6 @@ const [activeTab, setActiveTab] = useState('create-email');
 const [templateMode, setTemplateMode] = useState(false);
 const [currentTemplateHTML, setCurrentTemplateHTML] = useState('');
 const [currentTemplateInfo, setCurrentTemplateInfo] = useState<any>(null);
-```
-
-#### File Upload Implementation:
-```typescript
-const handleFileUpload = (files: FileList | null) => {
-  if (!files) return;
-  
-  const validFiles = Array.from(files).filter(file => {
-    const isImage = file.type.startsWith('image/');
-    const isValidSize = file.size <= 5 * 1024 * 1024; // 5MB limit
-    return isImage && isValidSize;
-  });
-  
-  if (validFiles.length > 0) {
-    setUploadedFiles(prev => [...prev, ...validFiles]);
-  }
-};
-
-// Drag and drop support
-const handleDragOver = (e: React.DragEvent) => {
-  e.preventDefault();
-  e.currentTarget.classList.add('dragover');
-};
-
-const handleDragLeave = (e: React.DragEvent) => {
-  e.preventDefault();
-  e.currentTarget.classList.remove('dragover');
-};
-
-const handleDrop = (e: React.DragEvent) => {
-  e.preventDefault();
-  e.currentTarget.classList.remove('dragover');
-  handleFileUpload(e.dataTransfer.files);
-};
 ```
 
 #### Template Loading System:
@@ -2453,77 +2419,6 @@ const finalConversationHistory: ConversationMessage[] = [
 setConversationHistory(finalConversationHistory);
 ```
 
-### 12.5 File Handling Patterns
-#### File Upload (EmailGenerator, LandingPageBuilder):
-```typescript
-const handleFileUpload = (files: FileList | null) => {
-  if (!files) return;
-  
-  const validFiles = Array.from(files).filter(file => {
-    const isImage = file.type.startsWith('image/');
-    const isValidSize = file.size <= 5 * 1024 * 1024; // 5MB limit
-    return isImage && isValidSize;
-  });
-  
-  if (validFiles.length > 0) {
-    setUploadedFiles(prev => [...prev, ...validFiles]);
-    
-    // Add to chat messages
-    const fileNames = validFiles.map(f => f.name).join(', ');
-    const newMessages = [
-      ...messages,
-      { type: 'user', content: `Uploaded files: ${fileNames}` }
-    ];
-    setMessages(newMessages);
-  }
-};
-```
-
-#### Drag and Drop Implementation:
-```typescript
-const handleDragOver = (e: React.DragEvent) => {
-  e.preventDefault();
-  e.currentTarget.classList.add('dragover');
-};
-
-const handleDragLeave = (e: React.DragEvent) => {
-  e.preventDefault();
-  e.currentTarget.classList.remove('dragover');
-};
-
-const handleDrop = (e: React.DragEvent) => {
-  e.preventDefault();
-  e.currentTarget.classList.remove('dragover');
-  handleFileUpload(e.dataTransfer.files);
-};
-```
-
-#### File Display and Removal:
-```typescript
-{uploadedFiles.length > 0 && (
-  <div className="uploaded-files">
-    {uploadedFiles.map((file, index) => (
-      <div key={index} className="uploaded-file">
-        <div className="file-info">
-          <Image size={16} />
-          <span>{file.name}</span>
-          <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>
-            ({(file.size / 1024).toFixed(1)} KB)
-          </span>
-        </div>
-        <button 
-          className="file-remove"
-          onClick={() => removeFile(index)}
-          title="Remove file"
-        >
-          <X size={14} />
-        </button>
-      </div>
-    ))}
-  </div>
-)}
-```
-
 ## 13. Export & Download System
 ### 13.1 DownloadButton Component
 Location: src/components/Common/DownloadButton.tsx
@@ -2708,7 +2603,7 @@ All components use TypeScript interfaces for props with proper typing.
 ### 14.5 Browser Compatibility
 - Uses modern JavaScript features (async/await, optional chaining)
 - Clipboard API for copy functionality
-- File API for drag and drop uploads
+- Natural language image URL integration
 - CSS Grid and Flexbox for layouts
 
 ### 14.6 Performance Considerations
@@ -2736,53 +2631,22 @@ All components use TypeScript interfaces for props with proper typing.
 - Input validation and boundary checking
 
 ## 15. Key Implementation Notes
-### 15.1 Drag and Drop Implementation
-Note: Drag and drop functionality IS implemented in EmailGenerator.tsx and LandingPageBuilder.tsx with the following handlers:
-```typescript
-const handleDragOver = (e: React.DragEvent) => {
-  e.preventDefault();
-  e.currentTarget.classList.add('dragover');
-};
-
-const handleDragLeave = (e: React.DragEvent) => {
-  e.preventDefault();
-  e.currentTarget.classList.remove('dragover');
-};
-
-const handleDrop = (e: React.DragEvent) => {
-  e.preventDefault();
-  e.currentTarget.classList.remove('dragover');
-  handleFileUpload(e.dataTransfer.files);
-};
-```
-
-Applied to upload areas with:
-
-```typescript
-<div 
-  className="upload-area"
-  onDragOver={handleDragOver}
-  onDragLeave={handleDragLeave}
-  onDrop={handleDrop}
->
-```
-
-### 15.2 File System Integration
+### 15.1 File System Integration
 The application references window.fs.readFile API but this appears to be a custom implementation not standard browser File API.
 
-### 15.3 Asset Loading Strategy
+### 15.2 Asset Loading Strategy
 - Templates and wireframes are loaded dynamically from index.js files
 - HTML content is fetched via HTTP requests
 - Graceful degradation for missing files
 - Error handling with user-friendly messages
 
-### 15.4 Conversation Context Management
+### 15.3 Conversation Context Management
 - 50k token limit enforced across all AI components
 - Visual indicators for session status
 - Automatic session reset functionality
 - Context preservation across multiple interactions
 
-### 15.5 Platform-Specific Features
+### 15.4 Platform-Specific Features
 - Email generator focuses on email-client compatibility
 - Landing page builder supports multiple frameworks
 - Social calendar includes platform-specific optimizations
