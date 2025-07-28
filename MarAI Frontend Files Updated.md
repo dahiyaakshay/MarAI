@@ -31,13 +31,16 @@
 - Main App: App.tsx
 - Styling: App.css, index.css, Sidebar.css
 - Services: apiService.ts, assetLoader.js, exportService.ts
-- Components: Layout, Common, Modals, Pages folders
+- Components: Layout, Common, Modals (5 modals), Pages (11 main tools)
 
 ### 1.3 Core Dependencies
 - React 18 with TypeScript
 - Lucide React for icons (imported per component)
 - Custom CSS with CSS variables for theming
 - File System API for asset loading (window.fs.readFile)
+- JSZip: Multi-file project packaging
+- file-saver: File download handling
+- ExcelJS: Excel file processing 
 
 ## 2. Project Structure
 Based on imports and file organization:
@@ -59,8 +62,10 @@ Based on imports and file organization:
 │   │   ├── AddClientModal.tsx # Client management modal
 │   │   ├── EditModal.tsx      # Generic edit modal
 │   │   ├── EditPersonaModal.tsx # Persona editing modal
+│   │   ├── GuidelinesModal.tsx # AI prompting education system
 │   │   └── PreviewModal.tsx   # Template/wireframe preview modal
 │   └── Pages/               
+│       ├── AdsAnalysis.tsx         # AI-powered advertising data analysis
 │       ├── ContentCreator.tsx       # Universal content generation tool
 │       ├── Dashboard.tsx           # Main dashboard with analytics
 │       ├── EmailCalendar.tsx       # Email campaign planning calendar
@@ -78,11 +83,28 @@ Based on imports and file organization:
 └── assets/                  # Referenced in assetLoader.js
     └── generator-assets/    
         ├── email/
-        │   ├── templates/index.js
-        │   └── wireframes/index.js
+        │   ├── templates/ (11 templates)
+        │   │   ├── announcement/ (2 templates)
+        │   │   ├── ecommerce/ (3 templates)
+        │   │   ├── newsletter/ (2 templates)
+        │   │   └── promotional/ (4 templates)
+        │   └── wireframes/ (10 wireframes)
+        │       ├── announcement/ (2 wireframes)
+        │       ├── e-commerce/ (4 wireframes)
+        │       ├── newsletter/ (1 wireframe)
+        │       ├── promotional/ (2 wireframes)
+        │       └── welcome/ (1 wireframe)
         └── landing-page/
-            ├── templates/index.js
-            └── wireframes/index.js</pre>
+            ├── templates/ (8 templates)
+            │   ├── agency/ (1 template)
+            │   ├── ecommerce/ (2 templates)
+            │   └── saas/ (5 templates)
+            └── wireframes/ (10 wireframes)
+                ├── agency/ (2 wireframes)
+                ├── app/ (1 wireframe)
+                ├── ecommerce/ (2 wireframes)
+                ├── saas/ (3 wireframes)
+                └── startup/ (2 wireframes)</pre>
 
 ## 3. Core Application Layer
 ### 3.1 main.tsx
@@ -141,6 +163,10 @@ const pageData = {
     title: 'Content Creator',
     subtitle: 'Generate any type of content with AI'
   },
+  'ads-analysis': {
+    title: 'Ads Analysis',
+    subtitle: 'Analyze your advertising data with AI'
+  },
   'prompt-library': {
     title: 'Prompt Library',
     subtitle: 'Claude-optimized prompts for all your tools'
@@ -161,8 +187,10 @@ const [editModalOpen, setEditModalOpen] = useState(false);
 const [addClientModalOpen, setAddClientModalOpen] = useState(false);
 const [editPersonaModalOpen, setEditPersonaModalOpen] = useState(false);
 const [previewModalOpen, setPreviewModalOpen] = useState(false);
+const [guidelinesModalOpen, setGuidelinesModalOpen] = useState(false);
 const [editModalData, setEditModalData] = useState(null);
 const [previewModalData, setPreviewModalData] = useState(null);
+const [guidelinesModalType, setGuidelinesModalType] = useState<'email' | 'landing-page'>('email');
 
 const [clients, setClients] = useState({
   'default': { name: 'Select Client...', data: {} }
@@ -201,6 +229,17 @@ const saveNewClient = (clientData) => {
   setCurrentClient(clientId);
   closeAddClientModal();
 };
+
+const openGuidelinesModal = (type: 'email' | 'landing-page') => {
+  setGuidelinesModalType(type);
+  setGuidelinesModalOpen(true);
+  document.body.style.overflow = 'hidden';
+};
+
+const closeGuidelinesModal = () => {
+  setGuidelinesModalOpen(false);
+  document.body.style.overflow = 'auto';
+};
 ```
 
 #### Template Usage Event System:
@@ -238,13 +277,15 @@ const renderActivePage = () => {
     case 'email-calendar':
       return <EmailCalendar openEditModal={openEditModal} />;
     case 'email-generator':
-      return <EmailGenerator openPreviewModal={openPreviewModal} />;
+      return <EmailGenerator openPreviewModal={openPreviewModal} openGuidelinesModal={openGuidelinesModal} />;
     case 'landing-page-builder':
-      return <LandingPageBuilder openPreviewModal={openPreviewModal} />;
+      return <LandingPageBuilder openPreviewModal={openPreviewModal} openGuidelinesModal={openGuidelinesModal} />;
     case 'persona-builder':
       return <PersonaBuilder openEditPersonaModal={openEditPersonaModal} />;
     case 'content-creator':
       return <ContentCreator />;
+    case 'ads-analysis':
+      return <AdsAnalysis />;
     case 'prompt-library':
       return <PromptLibrary />;
     case 'settings':
@@ -467,7 +508,7 @@ export const loadEmailWireframes = async () => {
     const { emailWireframes } = await import('../assets/generator-assets/email/wireframes/index.js');
     return emailWireframes || [];
   } catch (error) {
-    console.warn('No email wireframes found or failed to load:', error.message);
+    console.warn('Failed to load email wireframes:', error.message);
     return [];
   }
 };
@@ -480,7 +521,7 @@ export const loadLandingPageTemplates = async () => {
     const { landingPageTemplates } = await import('../assets/generator-assets/landing-page/templates/index.js');
     return landingPageTemplates || [];
   } catch (error) {
-    console.warn('No landing page templates found or failed to load:', error.message);
+    console.warn('Failed to load landing page templates:', error.message);
     return [];
   }
 };
@@ -739,7 +780,7 @@ Renders theme toggle button, client dropdown, and add client button.
 Always-dark sidebar with navigation sections:
 - General: Dashboard
 - Calendar: Marketing Calendar, Social Media Calendar, Email Calendar
-- Tools: Email Generator, Landing Page Builder, Persona Builder, Content Creator
+- Tools: Email Generator, Landing Page Builder, Persona Builder, Content Creator, Ads Analysis
 - Other: Prompt Library, Settings
 
 Uses dedicated Sidebar.css for styling.
@@ -943,75 +984,82 @@ const filteredTemplates = templateFilter === 'all'
 ```
 
 ### 6.4 LandingPageBuilder.tsx
-Purpose: Multi-platform landing page creation with template system
-#### Platform Selection System:
+Purpose: Multi-platform landing page creation with professional file separation
+#### "Dumb Pipeline" Architecture:
+- Let Claude decide single vs multi-file based on complexity
+- Always-visible UI elements (no conditional rendering)
+- Smart response parsing with JSON fallback to HTML
+
+#### Multi-File Content Interface:
 ```typescript
-const [selectedPlatform, setSelectedPlatform] = useState('static');
-const platforms = [
-  { id: 'static', name: 'Static HTML', description: 'Pure HTML, CSS, JavaScript' },
-  { id: 'wordpress', name: 'WordPress', description: 'HTML, CSS, JavaScript, PHP' },
-  { id: 'shopify', name: 'Shopify', description: 'Liquid, CSS, JavaScript' },
-  { id: 'react', name: 'React', description: 'JSX, CSS/Tailwind, JavaScript' },
-  { id: 'vue', name: 'Vue.js', description: 'Vue, CSS/Tailwind, JavaScript' }
-];
+interface MultiFileContent {
+  [filename: string]: string;
+}
+
+// Enhanced state management
+const [multiFileContent, setMultiFileContent] = useState<MultiFileContent>({});
+const [codeView, setCodeView] = useState('preview');
+const [isMultiFileMode, setIsMultiFileMode] = useState(false);
 ```
 
-#### Landing Page Preview (Iframe Implementation):
+#### Smart Response Parsing:
 ```typescript
-<iframe
-  style={{
-    width: '100%',
-    height: '100%',
-    minHeight: '600px',
-    border: '1px solid #e0e0e0',
-    borderRadius: '8px',
-    backgroundColor: '#ffffff',
-    maxWidth: previewMode === 'mobile' ? '375px' : '100%',
-    margin: '0 auto',
-    display: 'block',
-    boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
-    transition: 'max-width 0.3s ease'
-  }}
-  srcDoc={landingPagePreview}
-  title="Landing Page Preview"
-/>
+// Try JSON parsing first (multi-file response)
+try {
+  const jsonResponse = JSON.parse(cleaned);
+  const hasValidFiles = keys.some(key => 
+    key.includes('.html') || key.includes('.css') || key.includes('.js') || 
+    key.includes('.php') || key.includes('.liquid') || key.includes('.jsx') || 
+    key.includes('.vue')
+  );
+  
+  if (hasValidFiles && keys.length > 1) {
+    return { isMultiFile: true, files: jsonResponse };
+  }
+} catch (jsonError) {
+  // Fall back to single HTML handling
+}
 ```
-  
-#### Response Parsing for Complete HTML Documents:
+
+#### Code View System (Always Visible):
+9 Code View Buttons: Preview, HTML, CSS, JavaScript, PHP, Liquid, JSX, Vue, Tailwind
+- Smart Content Detection: Automatically finds matching files by extension
+- Fallback Messaging: Helpful messages when specific code types aren't available
+- Copy Functionality: Copies current view content (HTML, CSS, JS, etc.)
+
+#### ZIP Download System:
 ```typescript
-const parseLandingPageResponse = (aiResponse: string) => {
-  let cleaned = aiResponse.trim();
+const downloadZipPackage = async () => {
+  const zip = new JSZip();
   
-  // Remove markdown code blocks
-  cleaned = cleaned.replace(/^```html\s*/i, '');
-  cleaned = cleaned.replace(/^```\s*/i, '');
-  cleaned = cleaned.replace(/\s*```\s*$/i, '');
-  
-  // Check if it's already a complete HTML document
-  if (cleaned.includes('<!DOCTYPE') || cleaned.includes('<html>')) {
-    return { subject: 'Claude Generated Landing Page', content: cleaned, html: cleaned };
+  if (isMultiFileMode && Object.keys(multiFileContent).length > 0) {
+    // Multi-file ZIP with proper folder structure
+    Object.entries(multiFileContent).forEach(([filename, content]) => {
+      if (filename.includes('/')) {
+        const parts = filename.split('/');
+        const folder = parts.slice(0, -1).join('/');
+        const file = parts[parts.length - 1];
+        zip.folder(folder)?.file(file, content);
+      } else {
+        zip.file(filename, content);
+      }
+    });
+  } else {
+    // Single HTML file in ZIP
+    zip.file(`${selectedPlatform}-landing-page.html`, landingPagePreview);
   }
   
-  // Wrap incomplete HTML in complete document structure
-  const completeHTML = `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Claude Generated Landing Page</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; }
-    </style>
-</head>
-<body>
-    ${cleaned}
-</body>
-</html>`;
-  
-  return { subject: 'Claude Generated Landing Page', content: completeHTML, html: completeHTML };
+  const blob = await zip.generateAsync({ type: 'blob' });
+  saveAs(blob, `${selectedPlatform}-landing-page-project.zip`);
 };
 ```
+
+#### Platform-Specific File Generation:
+- Static HTML: index.html + styles.css + script.js
+- WordPress: index.php + style.css + functions.php
+- Shopify: index.liquid + assets/theme.css + assets/theme.js
+- React: App.jsx + App.css + package.json
+- Vue: App.vue + style.css + package.json
 
 ### 6.5 PersonaBuilder.tsx
 Purpose: AI-powered customer persona creation and management
@@ -1396,7 +1444,53 @@ const getStatusIcon = () => {
 };
 ```
 
-### 6.9 EmailCalendar.tsx & MarketingCalendar.tsx
+### 6.9 AdsAnalysis.tsx
+Purpose: AI-powered advertising data analysis with file upload support
+
+#### File Processing System:
+```typescript
+// Excel to CSV Conversion
+const buffer = await file.arrayBuffer();
+const workbook = new ExcelJS.Workbook();
+await workbook.xlsx.load(buffer);
+const worksheet = workbook.worksheets[0];
+
+let csvData = '';
+worksheet.eachRow((row, rowNumber) => {
+  const rowData = row.values.slice(1); // Remove first empty element
+  csvData += rowData.join(',') + '\n';
+});
+```
+
+#### Key Features:
+- Supported Formats: CSV, Excel (.xlsx, .xls)
+- Processing Pipeline: File Upload → ExcelJS Conversion → Claude Analysis → HTML Report
+- Conversation Memory: Full 50k token management system
+- Smart Data Integration: Data included only in first message, follow-ups just prompts
+- Professional Export: HTML reports with embedded styling
+
+#### Data Flow Pattern:
+```typescript
+// Include data only in first message
+if (conversationHistory.length === 0) {
+  promptToSend = `${currentPrompt}
+
+Here is my advertising data to analyze:
+${uploadedData}
+
+Please analyze this data and provide insights...`;
+} else {
+  // Follow-up messages: just the prompt
+  promptToSend = currentPrompt;
+}
+```
+
+#### Export Functionality:
+- HTML Download: Complete styled report with CSS embedded
+- Copy to Clipboard: Raw HTML for external use
+- File Naming: Intelligent naming based on original filename (ads-analysis-{fileName}.html)
+
+### 6.10 EmailCalendar.tsx & MarketingCalendar.tsx
 Purpose: Campaign planning calendars with AI integration
 #### Shared Calendar Implementation Pattern:
 ```typescript
@@ -1609,6 +1703,52 @@ Asset preview system that:
 - Wraps content with proper HTML structure
 - Handles loading states and errors
 
+### 8.5 GuidelinesModal.tsx
+Purpose: Comprehensive AI prompting education system
+
+#### Four-Tab Interface:
+```typescript
+interface GuidelinesModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  type: 'email' | 'landing-page';
+}
+
+const tabs = [
+  { id: 'design', label: 'Design & Branding', icon: Palette },
+  { id: 'content', label: 'Content Structure', icon: Layout },
+  { id: 'tracking', label: 'Tracking & Analytics', icon: Target },
+  { id: 'examples', label: 'Example Prompts', icon: Code }
+];
+```
+
+#### Dynamic Content System:
+- Design & Branding: Colors, typography, logos, platform-specific constraints
+- Content Structure: Email components vs landing page sections, accessibility guidelines
+- Tracking & Analytics: GA4, Facebook Pixel, marketing automation, GDPR compliance
+- Example Prompts: Complete copyable examples with best practices
+
+#### Copy-to-Clipboard System:
+```typescript
+const copyToClipboard = async (text: string, sectionId: string) => {
+  await navigator.clipboard.writeText(text);
+  setCopiedSections(prev => new Set(prev).add(sectionId));
+  
+  setTimeout(() => {
+    setCopiedSections(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(sectionId);
+      return newSet;
+    });
+  }, 2000);
+};
+```
+
+#### Content Highlights:
+- Email-specific: 600px width constraints, inline styles, email-client compatibility
+- Landing Page-specific: Responsive design, platform considerations, multi-file output
+- Universal: Color specifications, tracking setup, accessibility guidelines
+
 ## 9. Asset System Implementation
 ### 9.1 Asset Structure
 <pre>public/assets/generator-assets/
@@ -1667,13 +1807,13 @@ export const emailTemplateCount = emailTemplates.length;
 ```
 
 #### Email Wireframes (src/assets/generator-assets/email/wireframes/index.js):
-Empty array with categories: simple, complex, header-footer, sidebar, grid
+**10 wireframes** with categories: announcement, e-commerce, newsletter, promotional, welcome
 
 #### Landing Page Templates (src/assets/generator-assets/landing-page/templates/index.js):
-Empty array with categories: saas, ecommerce, agency, startup, portfolio, course, app, event
+**8 templates** with categories: agency, ecommerce, saas
 
 #### Landing Page Wireframes (src/assets/generator-assets/landing-page/wireframes/index.js):
-Empty array with categories: hero-focused, feature-grid, long-form, minimal, product-showcase
+**10 wireframes** with categories: agency, app, ecommerce, saas, startup
 
 ### 9.3 Existing Template Example
 #### announcement-01 metadata.json:
@@ -2647,9 +2787,17 @@ The application references window.fs.readFile API but this appears to be a custo
 - Context preservation across multiple interactions
 
 ### 15.4 Platform-Specific Features
-- Email generator focuses on email-client compatibility
-- Landing page builder supports multiple frameworks
+- Email generator focuses on email-client compatibility with GuidelinesModal education
+- Landing page builder supports multiple frameworks with multi-file ZIP output
 - Social calendar includes platform-specific optimizations
 - Content creator supports universal content types
+- Ads analysis provides data intelligence with Excel/CSV processing
+
+### 15.5 New Capabilities Added
+- **GuidelinesModal**: Comprehensive AI prompting education system with 4-tab interface
+- **AdsAnalysis**: Professional data analysis with Excel processing and HTML reports
+- **Multi-File Landing Pages**: ZIP packaging with platform-specific code separation
+- **Asset Library**: 39 templates/wireframes vs previously mostly empty placeholders
+- **Enhanced User Education**: Context-specific prompting guidelines for better AI results
 
 This documentation represents the complete implementation of the MarAI frontend as it exists in the provided source files. All features, patterns, and implementations described are currently functional and deployed in the application.
