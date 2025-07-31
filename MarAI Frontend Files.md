@@ -24,6 +24,8 @@
 - Styling: Custom CSS with CSS Variables
 - Icons: Lucide React
 - State Management: React Hooks with localStorage
+- Authentication: Opaque token-based authentication with session management
+- User Management: Individual user accounts with profile system
 - Export Libraries: jsPDF, ExcelJS, file-saver (used in exportService.ts)
 
 ### 1.2 Core Files Structure
@@ -66,6 +68,7 @@ Based on imports and file organization:
 │   │   └── PreviewModal.tsx   # Template/wireframe preview modal
 │   └── Pages/               
 │       ├── AdsAnalysis.tsx         # AI-powered advertising data analysis
+│       ├── Auth.tsx                # User authentication (login/signup)
 │       ├── ContentCreator.tsx       # Universal content generation tool
 │       ├── Dashboard.tsx           # Main dashboard with analytics
 │       ├── EmailCalendar.tsx       # Email campaign planning calendar
@@ -78,6 +81,7 @@ Based on imports and file organization:
 │       └── SocialCalendar.tsx     # Social media content calendar
 ├── services/                
 │   ├── apiService.ts        # API communication logic
+│   ├── authService.ts       # Authentication and session management
 │   ├── assetLoader.js       # Template/wireframe loading
 │   └── exportService.ts     # Download and export functionality
 └── assets/                  # Referenced in assetLoader.js
@@ -195,6 +199,84 @@ const [guidelinesModalType, setGuidelinesModalType] = useState<'email' | 'landin
 const [clients, setClients] = useState({
   'default': { name: 'Select Client...', data: {} }
 });
+```
+
+#### Authentication State Management:
+```typescript
+const [user, setUser] = useState<User | null>(null);
+const [isAuthenticated, setIsAuthenticated] = useState(false);
+const [authLoading, setAuthLoading] = useState(true);
+
+// Authentication initialization on app startup
+useEffect(() => {
+  const initializeAuth = async () => {
+    try {
+      const isValid = await authService.initialize();
+      if (isValid) {
+        setUser(authService.getUser());
+        setIsAuthenticated(true);
+      }
+    } catch (error) {
+      console.error('Auth initialization failed:', error);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+  initializeAuth();
+}, []);
+```
+
+#### Authentication Handlers:
+```typescript
+const handleAuthSuccess = (user: any, token: string) => {
+  setUser(user);
+  setIsAuthenticated(true);
+};
+
+const handleLogout = async () => {
+  try {
+    await authService.logout();
+    setUser(null);
+    setIsAuthenticated(false);
+  } catch (error) {
+    console.error('Logout failed:', error);
+  }
+};
+
+// Auth error event listener for automatic logout
+useEffect(() => {
+  const handleAuthError = () => {
+    setUser(null);
+    setIsAuthenticated(false);
+  };
+  
+  window.addEventListener('authError', handleAuthError);
+  return () => window.removeEventListener('authError', handleAuthError);
+}, []);
+```
+
+#### Conditional Rendering Implementation:
+```typescript
+// Loading state during auth initialization
+if (authLoading) {
+  return (
+    <div className="auth-loading">
+      <div className="auth-loading-content">
+        <div className="logo-icon">MarAI</div>
+        <h1>MarAI</h1>
+        <div className="loading-spinner"></div>
+        <p>Initializing...</p>
+      </div>
+    </div>
+  );
+}
+
+// Authentication gate
+if (!isAuthenticated) {
+  return <Auth onAuthSuccess={handleAuthSuccess} />;
+}
+
+// Main application (existing render logic)
 ```
 
 #### Theme Management:
@@ -319,10 +401,11 @@ private async makeRequest(endpoint: string, options: RequestInit = {}): Promise<
   const apiKeys = this.getStoredApiKeys();
   
   const headers = {
-    'Content-Type': 'application/json',
-    'X-API-Keys': JSON.stringify(apiKeys),
-    ...options.headers
-  };
+  'Content-Type': 'application/json',
+  'X-API-Keys': JSON.stringify(apiKeys),
+  ...authService.getAuthHeader(),    // New: Add authentication token
+  ...options.headers
+};
 
   try {
     const response = await fetch(`http://localhost:3001/api/${endpoint}`, {
@@ -481,13 +564,82 @@ async validateAnthropicKey(apiKey: string): Promise<ApiResponse> {
 }
 ```
 
+#### Authentication Integration Methods:
+```typescript
+isUserAuthenticated(): boolean
+getCurrentUser(): User | null
+getAuthenticationStatus(): { isAuthenticated: boolean; hasApiKey: boolean; canUseAI: boolean }
+```
+
 #### Export:
 ```typescript
 export const apiService = new ApiService();
 export type { ConversationMessage, ApiResponse };
 ```
 
-### 4.2 assetLoader.js
+### 4.2 authService.ts
+#### Type Definitions:
+```typescript
+interface User {
+  id: number;
+  email: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface AuthResponse {
+  success: boolean;
+  data?: {
+    user: User;
+    token: string;
+  };
+  error?: string;
+  message?: string;
+}
+```
+
+#### Core Authentication Methods:
+```typescript
+async signup(signupData: SignupData): Promise<AuthResponse>
+async login(loginData: LoginData): Promise<AuthResponse>
+async logout(): Promise<void>
+async changePassword(passwordData: ChangePasswordData): Promise<AuthResponse>
+```
+
+#### Session Management:
+```typescript
+isAuthenticated(): boolean
+validateSession(): Promise<boolean>
+initialize(): Promise<boolean>
+handleAuthError(): void
+```
+
+#### Token & Data Management:
+```typescript
+getToken(): string | null
+getUser(): User | null
+setToken(token: string): void       // Private
+setUser(user: User): void          // Private
+clearAuthData(): void
+getAuthHeader(): Record<string, string>
+```
+
+#### Utility Methods:
+```typescript
+getUserEmail(): string | null
+getUserId(): number | null
+getUserDisplayInfo(): { email: string; initials: string } | null
+hasValidSession(): boolean
+refreshUser(): Promise<User | null>
+```
+
+#### Error Handling Features:
+- Network error detection and messaging
+- Token expiration handling with auto-logout
+- Authentication error event dispatching
+- Comprehensive error categorization
+
+### 4.3 assetLoader.js
 #### Email Template Loading:
 ```javascript
 export const loadEmailTemplates = async () => {
@@ -719,7 +871,7 @@ export const logAssetStats = async () => {
 };
 ```
 
-### 4.3 exportService.ts
+### 4.4 exportService.ts
 #### Type Definitions:
 ```typescript
 export interface CalendarEvent {
@@ -772,10 +924,31 @@ interface HeaderProps {
   clients: Record<string, { name: string; data: any }>;
   switchClient: (clientId: string) => void;
   openAddClientModal: () => void;
+  user: User | null;              // New
+  onLogout: () => void;           // New
 }
 ```
 
 Renders theme toggle button, client dropdown, and add client button.
+
+#### User Authentication Display:
+```typescript
+const getUserInitials = (email: string): string => {
+  const emailParts = email.split('@');
+  const localPart = emailParts[0];
+  
+  if (localPart.includes('.')) {
+    const nameParts = localPart.split('.');
+    return nameParts.slice(0, 2).map(part => part.charAt(0).toUpperCase()).join('');
+  } else if (localPart.includes('_')) {
+    const nameParts = localPart.split('_');
+    return nameParts.slice(0, 2).map(part => part.charAt(0).toUpperCase()).join('');
+  } else {
+    return localPart.substring(0, 2).toUpperCase();
+  }
+};
+```
+
 #### Sidebar.tsx
 Always-dark sidebar with navigation sections:
 - General: Dashboard
@@ -858,8 +1031,47 @@ const contentTypes = [
   whiteSpace: 'pre-wrap'
 }}>
 ```
+
+### 6.2 Auth.tsx
+Purpose: User authentication page with login and signup functionality
+
+#### Dual Mode Interface:
+```typescript
+const [mode, setMode] = useState<'login' | 'signup'>('login');
+
+const switchMode = () => {
+  setMode(mode === 'login' ? 'signup' : 'login');
+  setFormData({ email: '', password: '', confirmPassword: '' });
+  setFormErrors({});
+};
+```
+
+#### Form Validation Implementation:
+```typescript
+const validateForm = (): boolean => {
+  const errors: FormErrors = {};
   
-### 6.2 Dashboard.tsx
+  // Email validation
+  if (!formData.email.includes('@')) {
+    errors.email = 'Please enter a valid email address';
+  }
+  
+  // Password validation
+  if (formData.password.length < 8) {
+    errors.password = 'Password must be at least 8 characters long';
+  }
+  
+  // Confirm password (signup only)
+  if (mode === 'signup' && formData.password !== formData.confirmPassword) {
+    errors.confirmPassword = 'Passwords do not match';
+  }
+  
+  setFormErrors(errors);
+  return Object.keys(errors).length === 0;
+};
+```
+
+### 6.3 Dashboard.tsx
 Purpose: Central hub with analytics, navigation, and overview widgets
 #### Quick Actions Implementation:
 ```typescript
@@ -924,7 +1136,7 @@ const getDaysInMonth = () => {
 };
 ```
 
-### 6.3 EmailGenerator.tsx
+### 6.4 EmailGenerator.tsx
 Purpose: Email creation with template/wireframe system
 #### Tab System:
 ```typescript
@@ -983,7 +1195,7 @@ const filteredTemplates = templateFilter === 'all'
 // Filter buttons for categories: newsletter, promotional, welcome, announcement, ecommerce
 ```
 
-### 6.4 LandingPageBuilder.tsx
+### 6.5 LandingPageBuilder.tsx
 Purpose: Multi-platform landing page creation with professional file separation
 #### "Dumb Pipeline" Architecture:
 - Let Claude decide single vs multi-file based on complexity
@@ -1061,7 +1273,7 @@ const downloadZipPackage = async () => {
 - React: App.jsx + App.css + package.json
 - Vue: App.vue + style.css + package.json
 
-### 6.5 PersonaBuilder.tsx
+### 6.6 PersonaBuilder.tsx
 Purpose: AI-powered customer persona creation and management
 #### Two-Tab System:
 ```typescript
@@ -1144,7 +1356,7 @@ const personas = [
 const currentPersona = personas.find(p => p.id === selectedPersona) || personas[0];
 ```
 
-### 6.6 SocialCalendar.tsx
+### 6.7 SocialCalendar.tsx
 Purpose: Social media content calendar with platform-specific optimization
 #### Calendar Event Structure:
 ```typescript
@@ -1257,7 +1469,7 @@ const getPlatformColor = (platform: string): string => {
 ))}
 ```
 
-### 6.7 PromptLibrary.tsx
+### 6.8 PromptLibrary.tsx
 Purpose: Curated AI prompt library with search and customization
 #### Prompt Structure:
 ```typescript
@@ -1338,7 +1550,7 @@ const copyToClipboard = async (promptId: string, content: string) => {
 }
 ```
 
-### 6.8 Settings.tsx
+### 6.9 Settings.tsx
 Purpose: User profile management and API key configuration
 #### Profile Management:
 ```typescript
@@ -1361,6 +1573,44 @@ const saveProfile = async () => {
   } catch (error) {
     console.error('Failed to save profile:', error);
     alert('Failed to save profile. Please try again.');
+  }
+};
+```
+
+#### Password Change Management:
+```typescript
+const [passwordData, setPasswordData] = useState({
+  currentPassword: '',
+  newPassword: '',
+  confirmNewPassword: ''
+});
+
+const [passwordErrors, setPasswordErrors] = useState<{
+  currentPassword?: string;
+  newPassword?: string;
+  confirmNewPassword?: string;
+  general?: string;
+}>({});
+
+const handlePasswordChange = async () => {
+  // Validation
+  if (passwordData.newPassword.length < 8) {
+    setPasswordErrors({ newPassword: 'Password must be at least 8 characters long' });
+    return;
+  }
+  
+  if (passwordData.newPassword !== passwordData.confirmNewPassword) {
+    setPasswordErrors({ confirmNewPassword: 'Passwords do not match' });
+    return;
+  }
+  
+  try {
+    await authService.changePassword(passwordData);
+    setPasswordData({ currentPassword: '', newPassword: '', confirmNewPassword: '' });
+    setPasswordErrors({});
+    alert('Password changed successfully!');
+  } catch (error: any) {
+    setPasswordErrors({ general: error.message });
   }
 };
 ```
@@ -1444,7 +1694,7 @@ const getStatusIcon = () => {
 };
 ```
 
-### 6.9 AdsAnalysis.tsx
+### 6.10 AdsAnalysis.tsx
 Purpose: AI-powered advertising data analysis with file upload support
 
 #### File Processing System:
@@ -1490,7 +1740,7 @@ Please analyze this data and provide insights...`;
 - Copy to Clipboard: Raw HTML for external use
 - File Naming: Intelligent naming based on original filename (ads-analysis-{fileName}.html)
 
-### 6.10 EmailCalendar.tsx & MarketingCalendar.tsx
+### 6.11 EmailCalendar.tsx & MarketingCalendar.tsx
 Purpose: Campaign planning calendars with AI integration
 #### Shared Calendar Implementation Pattern:
 ```typescript
@@ -2462,7 +2712,44 @@ if (savedProfile) {
 }
 ```
 
-### 12.2 Modal State Pattern
+### 12.2 Authentication State Management
+#### User Session Persistence (App.tsx):
+```typescript
+const [user, setUser] = useState<User | null>(null);
+const [isAuthenticated, setIsAuthenticated] = useState(false);
+const [authLoading, setAuthLoading] = useState(true);
+
+// Initialize authentication on app startup
+useEffect(() => {
+  const initializeAuth = async () => {
+    try {
+      const isValid = await authService.initialize();
+      if (isValid) {
+        setUser(authService.getUser());
+        setIsAuthenticated(true);
+      }
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+  initializeAuth();
+}, []);
+```
+
+#### Authentication Event Handling:
+```typescript
+// Global auth error listener for automatic logout
+useEffect(() => {
+  const handleAuthError = () => {
+    setUser(null);
+    setIsAuthenticated(false);
+  };
+  window.addEventListener('authError', handleAuthError);
+  return () => window.removeEventListener('authError', handleAuthError);
+}, []);
+```
+
+### 12.3 Modal State Pattern
 #### Centralized Modal Management (App.tsx):
 ```typescript
 const openEditModal = (data = null) => {
@@ -2478,7 +2765,7 @@ const closeEditModal = () => {
 };
 ```
 
-### 12.3 Component Communication Patterns
+### 12.4 Component Communication Patterns
 #### Modal Integration:
 ```typescript
 // Props passed to components
@@ -2503,6 +2790,35 @@ openEditModal({
   audience: '',
   tags: ''
 });
+```
+
+#### Authentication Props Integration:
+```typescript
+// App.tsx passes user authentication data to Header
+<Header 
+  title={currentData.title}
+  subtitle={currentData.subtitle}
+  theme={theme}
+  toggleTheme={toggleTheme}
+  currentClient={currentClient}
+  clients={clients}
+  switchClient={switchClient}
+  openAddClientModal={openAddClientModal}
+  user={user}              // New: User data
+  onLogout={handleLogout}  // New: Logout handler
+/>
+
+// Auth component receives authentication success callback
+<Auth onAuthSuccess={handleAuthSuccess} />
+```
+
+#### Authentication Event System:
+```typescript
+// Global authentication error handling
+window.dispatchEvent(new CustomEvent('authError'));
+
+// Components listen for auth errors
+window.addEventListener('authError', handleAuthError);
 ```
 
 #### Global Event System (Template Usage):
@@ -2533,7 +2849,7 @@ useEffect(() => {
 }, []);
 ```
 
-### 12.4 State Persistence Patterns
+### 12.5 State Persistence Patterns
 #### Calendar Events (SocialCalendar.tsx):
 ```typescript
 // Store events globally for export service
@@ -2732,39 +3048,96 @@ typescript
 }
 ```
 
-### 14.3 Component Props Pattern
+### 14.3 Authentication Error Handling Pattern
+#### Used across authentication-integrated components:
+```typescript
+try {
+  await authService.login(loginData);
+  handleAuthSuccess(user, token);
+} catch (error: any) {
+  if (error.message?.includes('Cannot connect to backend server')) {
+    setFormErrors({ general: 'Cannot connect to server. Please check your connection.' });
+  } else if (error.message?.includes('Invalid credentials')) {
+    setFormErrors({ general: 'Invalid email or password. Please try again.' });
+  } else {
+    setFormErrors({ general: error.message || 'Authentication failed. Please try again.' });
+  }
+}
+```
+
+#### Session Expiration Handling:
+```typescript
+// Automatic logout on token expiration
+const handleAuthError = () => {
+  authService.clearAuthData();
+  window.dispatchEvent(new CustomEvent('authError'));
+};
+
+// Global listener for auth errors
+window.addEventListener('authError', () => {
+  setUser(null);
+  setIsAuthenticated(false);
+});
+```
+
+### 14.4 Component Props Pattern
 All components use TypeScript interfaces for props with proper typing.
 
-### 14.4 Import/Export Pattern
+### 14.5 Import/Export Pattern
 - Components: Default exports with named interface exports
 - Services: Named exports with singleton instances (apiService)
 - Utilities: Named exports for functions
 
-### 14.5 Browser Compatibility
+### 14.6 Browser Compatibility
 - Uses modern JavaScript features (async/await, optional chaining)
 - Clipboard API for copy functionality
 - Natural language image URL integration
 - CSS Grid and Flexbox for layouts
 
-### 14.6 Performance Considerations
+### 14.7 Performance Considerations
 - Lazy loading of assets through assetLoader service
 - Conversation history kept in memory (not persisted)
 - Image error handling with fallback displays
 - Efficient re-rendering with proper React keys
 
-### 14.7 Security Considerations
+### 14.8 Security Considerations
 - API keys stored in localStorage (client-side only)
 - No sensitive data sent to client components
 - File upload validation (image types, size limits)
 - Proper error boundaries and input validation
 
-### 14.8 TypeScript Usage
+#### Authentication Security:
+- Opaque token storage in localStorage with automatic cleanup
+- Session validation on app initialization and API requests
+- Automatic logout on token expiration or authentication errors
+- Password strength requirements (minimum 8 characters)
+- Secure password change flow with current password verification
+- Protection against session hijacking with server-side token validation
+- Input validation and sanitization for authentication forms
+- Error handling that doesn't expose sensitive information
+
+#### Session Management Security:
+```typescript
+// Token expiration handling
+if (response.status === 401) {
+  authService.handleAuthError();  // Clear tokens and redirect
+  throw new Error('Session expired');
+}
+
+// Secure token storage with cleanup
+clearAuthData(): void {
+  localStorage.removeItem('authToken');
+  localStorage.removeItem('authUser');
+}
+```
+
+### 14.9 TypeScript Usage
 - Interface definitions for all major data structures
 - Proper typing for event handlers and props
 - Type-safe state management patterns
 - Generic typing for reusable components
 
-### 14.9 Error Handling Strategy
+### 14.10 Error Handling Strategy
 - Graceful degradation for missing assets
 - Network error handling with user feedback
 - Fallback parsing for AI responses
@@ -2793,11 +3166,35 @@ The application references window.fs.readFile API but this appears to be a custo
 - Content creator supports universal content types
 - Ads analysis provides data intelligence with Excel/CSV processing
 
-### 15.5 New Capabilities Added
+### 15.5 Authentication System Integration
+#### Session Management Strategy:
+- Opaque token-based authentication with server-side validation
+- Automatic session initialization on app startup with loading states
+- Conditional rendering pattern: Loading → Auth Gate → Main Application
+- Global authentication error handling with automatic logout
+
+#### User Interface Integration:
+- Seamless integration with existing Header component and user dropdown
+- Smart avatar generation from email addresses with initials fallback
+- Password management integrated into Settings page
+- Professional branded authentication forms with real-time validation
+
+#### API Request Enhancement:
+- Automatic token inclusion in all API requests via authService integration
+- Authentication-aware error handling with session expiration detection
+- User context availability for enhanced AI features when authenticated
+- Backward compatibility maintained for all existing functionality
+  
+### 15.6 New Capabilities Added
 - **GuidelinesModal**: Comprehensive AI prompting education system with 4-tab interface
 - **AdsAnalysis**: Professional data analysis with Excel processing and HTML reports
 - **Multi-File Landing Pages**: ZIP packaging with platform-specific code separation
 - **Asset Library**: 39 templates/wireframes vs previously mostly empty placeholders
 - **Enhanced User Education**: Context-specific prompting guidelines for better AI results
+- **User Authentication System**: Complete login/signup functionality with opaque token-based session management
+- **Password Management**: Integrated password change functionality in Settings with validation and security requirements
+- **User Interface Integration**: Professional avatar generation, user dropdown menu, and authentication-gated application access
+- **Session Persistence**: Automatic session restoration on app startup with branded loading states and error handling
+- **API Authentication**: Enhanced API service with automatic token inclusion and authentication-aware error handling
 
-This documentation represents the complete implementation of the MarAI frontend as it exists in the provided source files. All features, patterns, and implementations described are currently functional and deployed in the application.
+This documentation represents the complete implementation of the MarAI frontend including the comprehensive authentication system. All features, patterns, and implementations described are currently functional and deployed in the application.
