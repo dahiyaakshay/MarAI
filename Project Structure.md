@@ -1,9 +1,6 @@
 # Project Structure
 
-<pre>D:\MarAI>tree /f
-Folder PATH listing for volume New Volume
-Volume serial number is AC59-2DCF
-D:.
+<pre>MarAI>
 │   .gitignore
 │   eslint.config.js
 │   index.html
@@ -244,6 +241,7 @@ D:.
 │                               wireframe.html
 │
 ├───server
+│   │   .env
 │   │   .env.example
 │   │   .gitignore
 │   │   package-lock.json
@@ -254,16 +252,30 @@ D:.
 │   └───src
 │       │   index.ts
 │       │
+│       ├───config
+│       │       database.ts
+│       │
 │       ├───middleware
 │       │       auth.ts
+│       │       authMiddleware.ts
 │       │       rateLimiter.ts
 │       │
+│       ├───migrations
+│       │       001_create_users_table.sql
+│       │       002_create_tokens_table.sql
+│       │
+│       ├───models
+│       │       Token.ts
+│       │       User.ts
+│       │
 │       ├───routes
+│       │       auth.ts
 │       │       generate.ts
 │       │       validate.ts
 │       │
 │       ├───services
 │       │       aiService.ts
+│       │       tokenService.ts
 │       │
 │       └───types
 │               index.ts
@@ -443,6 +455,8 @@ D:.
     │   │       PreviewModal.tsx
     │   │
     │   └───Pages
+    │           AdsAnalysis.tsx
+    │           Auth.tsx
     │           ContentCreator.tsx
     │           Dashboard.tsx
     │           EmailCalendar.tsx
@@ -457,4 +471,5 @@ D:.
     └───services
             apiService.ts
             assetLoader.js
+            authService.ts
             exportService.ts</pre>
