@@ -5,34 +5,49 @@
 
 ## 📁 Backend Structure Overview
 <pre>server/ (Backend Root)
-├── package.json            # Backend dependencies & scripts
-├── README.md               # Project documentation
-├── tsconfig.json           # TypeScript configuration
-├── .env.example            # Environment variables template
-├── .gitignore              # Git ignore patterns
-└── src/                    # Source code directory
-    ├── index.ts            # Main server entry point
-    ├── types/
-    │   └── index.ts        # TypeScript type definitions
-    ├── services/
-    │   ├── aiService.ts    # Claude AI service implementation
-    │   └── tokenService.ts # Token business logic service
-    ├── routes/
-    │   ├── generate.ts     # Content generation endpoints
-    │   ├── validate.ts     # API key validation endpoints
-    │   └── auth.ts         # Authentication endpoints
-    ├── middleware/
-    │   ├── auth.ts         # Enhanced authentication middleware
-    │   ├── rateLimiter.ts  # Rate limiting middleware
-    │   └── authMiddleware.ts # User authentication middleware
-    ├── models/             # Database models
-    │   ├── User.ts         # User database operations
-    │   └── Token.ts        # Token database operations
-    ├── config/             # Configuration
-    │   └── database.ts     # PostgreSQL configuration
-    └── migrations/         # Database migrations
-        ├── 001_create_users_table.sql
-        └── 002_create_tokens_table.sql</pre>
+│   .env
+│   .env.example
+│   .gitignore
+│   package-lock.json
+│   package.json
+│   README.md
+│   tsconfig.json
+│
+└───src
+    │   index.ts
+    │
+    ├───config
+    │       database.ts
+    │
+    ├───middleware
+    │       auth.ts
+    │       authMiddleware.ts
+    │       rateLimiter.ts
+    │
+    ├───migrations
+    │       001_create_users_table.sql
+    │       002_create_tokens_table.sql
+    │       003_add_user_profile_fields.sql
+    │       004_create_email_verifications_table.sql
+    │       005_create_password_resets_table.sql
+    │
+    ├───models
+    │       EmailVerification.ts
+    │       Token.ts
+    │       User.ts
+    │
+    ├───routes
+    │       auth.ts
+    │       generate.ts
+    │       validate.ts
+    │
+    ├───services
+    │       aiService.ts
+    │       emailService.ts
+    │       tokenService.ts
+    │
+    └───types
+            index.ts</pre>
 
 ## 🏗️ Architecture Philosophy
 ### Pure Claude Passthrough Design
