@@ -310,7 +310,7 @@ CONVERSATION_RATE_LIMIT=50
 
 # Email Service Configuration (Gmail SMTP)
 SMTP_USER=akddme@gmail.com
-SMTP_APP_PASSWORD=your_gmail_app_password_here
+SMTP_APP_PASSWORD=your_16_character_gmail_app_password  # Get from Google Account settings
 SMTP_FROM_EMAIL=akddme@gmail.com
 SMTP_FROM_NAME=MarAI Team
 
@@ -320,12 +320,11 @@ MAX_VERIFICATION_ATTEMPTS=3
 VERIFICATION_EMAIL_RATE_LIMIT_COUNT=3
 VERIFICATION_EMAIL_RATE_LIMIT_WINDOW_MINUTES=60
 
-# Password Reset Settings
+# Password Reset Settings  
 RESET_CODE_EXPIRY_MINUTES=10
 MAX_RESET_ATTEMPTS=3
 RESET_EMAIL_RATE_LIMIT_COUNT=2
-RESET_IP_RATE_LIMIT_COUNT=5
-RESET_SECURITY_THRESHOLD=10
+RESET_EMAIL_RATE_LIMIT_WINDOW_MINUTES=30
 
 # Enhanced Authentication Settings
 MIN_NAME_LENGTH=2
@@ -341,7 +340,16 @@ AUTH_LOG_RETENTION_DAYS=90
 VERIFICATION_LOG_RETENTION_DAYS=7
 CLEANUP_JOB_INTERVAL_HOURS=6
 ```
-
+#### Gmail SMTP Setup Requirements
+1. **Enable 2-Step Verification** in your Google Account
+2. **Generate App Password**:
+   - Go to https://myaccount.google.com/apppasswords
+   - Select "Mail" as the application
+   - Copy the 16-character password (no spaces)
+3. **Configure Environment**:
+   - Use the app password in `SMTP_APP_PASSWORD` (not your regular Gmail password)
+   - Ensure `SMTP_USER` matches your Gmail address
+     
 ### Environment Variables Breakdown
 #### Server Configuration
 | Variable   | Default   | Purpose   | Options   |
@@ -1169,7 +1177,7 @@ export class EmailService {
   private transporter: nodemailer.Transporter;
 
   constructor() {
-    this.transporter = nodemailer.createTransporter({
+    this.transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
         user: process.env.SMTP_USER || 'akddme@gmail.com',
@@ -1568,6 +1576,7 @@ import { userModel } from '../models/User';
 import { emailVerificationModel } from '../models/EmailVerification';
 import { emailService } from '../services/emailService';
 import { tokenService } from '../services/tokenService';
+import { tokenModel } from '../models/Token';
 import { authenticateUser } from '../middleware/authMiddleware';
 import { ApiResponse } from '../types';
 
@@ -1628,8 +1637,9 @@ router.post('/signup', async (req, res) => {
       country: country?.trim()
     });
     
-    // Generate authentication token
-    const { token, expiresAt } = await tokenService.generateAuthToken(newUser.id);
+    // FIXED: Generate authentication token with correct format
+    const { token } = await tokenModel.createToken(newUser.id);
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
     
     // Send verification email automatically
     try {
@@ -1693,7 +1703,10 @@ router.post('/login', async (req, res) => {
     
     // Get public user data
     const publicUser = await userModel.findById(user.id);
-    const { token, expiresAt } = await tokenService.generateAuthToken(user.id);
+    
+    // FIXED: Generate authentication token with correct format
+    const { token } = await tokenModel.createToken(user.id);
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
     
     res.json({
       success: true,
@@ -5130,6 +5143,31 @@ psql -U marai_user -d marai_dev -c "SELECT email, created_at FROM users;"
 psql -U marai_user -d marai_dev -c "SELECT user_id, expires_at FROM tokens WHERE expires_at > NOW();"
 ```
 
+### Token Creation Issues
+```bash
+# Problem: user_id showing as null in tokens table
+# Root Cause: TokenModel.createToken() expects object format, not direct ID
+
+# Check for null user_id tokens in database
+psql -U marai_user -d marai_dev -c "
+SELECT user_id, created_at, expires_at 
+FROM tokens 
+WHERE user_id IS NULL;
+"
+
+# Verify correct token creation
+psql -U marai_user -d marai_dev -c "
+SELECT user_id, created_at, expires_at 
+FROM tokens 
+WHERE user_id IS NOT NULL 
+ORDER BY created_at DESC LIMIT 5;
+"
+
+# Fix: Ensure token creation uses proper format
+# WRONG: tokenModel.createToken(user.id)
+# CORRECT: tokenModel.createToken({ userId: user.id })
+```
+
 ### Database Migration Issues
 ```bash
 # Check if tables exist
@@ -5146,6 +5184,68 @@ psql -U marai_user -d marai_dev -c "\d tokens"
 # Verify constraints and indexes
 psql -U marai_user -d marai_dev -c "\d+ users"
 psql -U marai_user -d marai_dev -c "\d+ tokens"
+```
+
+### Profile Summary Function Issues
+```bash
+# Problem: getProfileSummary() failing with function does not exist errors
+# Error: function get_user_display_name(integer) does not exist
+# Error: function get_user_initials(integer) does not exist
+
+# Create missing PostgreSQL utility functions
+psql -U marai_user -d marai_dev -c "
+CREATE OR REPLACE FUNCTION get_user_display_name(user_id INTEGER)
+RETURNS TEXT AS \$\$
+DECLARE
+    result TEXT;
+BEGIN
+    SELECT 
+        CASE 
+            WHEN first_name IS NOT NULL AND last_name IS NOT NULL THEN 
+                first_name || ' ' || last_name
+            WHEN first_name IS NOT NULL THEN 
+                first_name
+            ELSE 
+                SPLIT_PART(email, '@', 1)
+        END
+    INTO result
+    FROM users 
+    WHERE id = user_id;
+    
+    RETURN COALESCE(result, 'User');
+END;
+\$\$ LANGUAGE plpgsql;
+"
+
+# Create user initials function
+psql -U marai_user -d marai_dev -c "
+CREATE OR REPLACE FUNCTION get_user_initials(user_id INTEGER)
+RETURNS TEXT AS \$\$
+DECLARE
+    result TEXT;
+BEGIN
+    SELECT 
+        CASE 
+            WHEN first_name IS NOT NULL AND last_name IS NOT NULL THEN 
+                UPPER(LEFT(first_name, 1)) || UPPER(LEFT(last_name, 1))
+            WHEN first_name IS NOT NULL THEN 
+                UPPER(LEFT(first_name, 2))
+            ELSE 
+                UPPER(LEFT(SPLIT_PART(email, '@', 1), 2))
+        END
+    INTO result
+    FROM users 
+    WHERE id = user_id;
+    
+    RETURN COALESCE(result, 'U');
+END;
+\$\$ LANGUAGE plpgsql;
+"
+
+# Test the functions
+psql -U marai_user -d marai_dev -c "
+SELECT get_user_display_name(1) as display_name, get_user_initials(1) as initials;
+"
 ```
 
 ### Token Management Issues
@@ -5341,6 +5441,17 @@ transporter.verify((error, success) => {
 
 # Check email logs in database
 psql -U marai_user -d marai_dev -c "SELECT * FROM email_logs ORDER BY sent_at DESC LIMIT 10;"
+
+# Common Error: createTransporter is not a function
+# Cause: Wrong method name in nodemailer
+# Fix: Use createTransport (not createTransporter)
+
+# Verify nodemailer is working
+node -e "
+const nodemailer = require('nodemailer');
+console.log('Available methods:', Object.getOwnPropertyNames(nodemailer));
+console.log('createTransport exists:', typeof nodemailer.createTransport);
+"
 ```
 
 ### Verification Code Issues
