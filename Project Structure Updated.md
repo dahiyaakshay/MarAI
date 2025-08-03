@@ -263,8 +263,12 @@
 │       ├───migrations
 │       │       001_create_users_table.sql
 │       │       002_create_tokens_table.sql
+│       │       003_add_user_profile_fields.sql
+│       │       004_create_email_verifications_table.sql
+│       │       005_create_password_resets_table.sql
 │       │
 │       ├───models
+│       │       EmailVerification.ts
 │       │       Token.ts
 │       │       User.ts
 │       │
@@ -275,6 +279,7 @@
 │       │
 │       ├───services
 │       │       aiService.ts
+│       │       emailService.ts
 │       │       tokenService.ts
 │       │
 │       └───types
