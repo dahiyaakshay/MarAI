@@ -51,68 +51,198 @@
 ## 2. Project Structure
 Based on imports and file organization:
 <pre>src/
-├── App.css                    # Global styles and theme system
-├── App.tsx                    # Main application orchestrator
-├── index.css                  # Contains: /* Remove all Tailwind imports to prevent conflicts with custom CSS */
-├── main.tsx                   # React entry point
-├── vite-env.d.ts             # /// <reference types="vite/client" />
-├── components/               
-│   ├── Common/              
-│   │   ├── DownloadButton.tsx # Export functionality for calendars/content
-│   │   └── MultiSelect.tsx    # Multi-option selector with checkboxes
-│   ├── Layout/              
-│   │   ├── Header.tsx         # Application header
-│   │   ├── Sidebar.tsx        # Navigation sidebar
-│   │   └── Sidebar.css        # Sidebar-specific styles
-│   ├── Modals/              
-│   │   ├── AddClientModal.tsx # Client management modal
-│   │   ├── EditModal.tsx      # Generic edit modal
-│   │   ├── EditPersonaModal.tsx # Persona editing modal
-│   │   ├── GuidelinesModal.tsx # AI prompting education system
-│   │   └── PreviewModal.tsx   # Template/wireframe preview modal
-│   └── Pages/               
-│       ├── AdsAnalysis.tsx         # AI-powered advertising data analysis
-│       ├── Auth.tsx                # User authentication (login/signup)
-│       ├── ContentCreator.tsx       # Universal content generation tool
-│       ├── Dashboard.tsx           # Main dashboard with analytics
-│       ├── EmailCalendar.tsx       # Email campaign planning calendar
-│       ├── EmailGenerator.tsx      # Email creation with templates/wireframes
-│       ├── LandingPageBuilder.tsx  # Multi-platform landing page creation
-│       ├── MarketingCalendar.tsx   # Marketing content calendar
-│       ├── PersonaBuilder.tsx      # Customer persona builder and manager
-│       ├── PromptLibrary.tsx       # AI prompt library and management
-│       ├── Settings.tsx           # User settings and API configuration
-│       └── SocialCalendar.tsx     # Social media content calendar
-├── services/                
-│   ├── apiService.ts        # API communication logic
-│   ├── authService.ts       # Authentication and session management
-│   ├── assetLoader.js       # Template/wireframe loading
-│   └── exportService.ts     # Download and export functionality
-└── assets/                  # Referenced in assetLoader.js
-    └── generator-assets/    
-        ├── email/
-        │   ├── templates/ (11 templates)
-        │   │   ├── announcement/ (2 templates)
-        │   │   ├── ecommerce/ (3 templates)
-        │   │   ├── newsletter/ (2 templates)
-        │   │   └── promotional/ (4 templates)
-        │   └── wireframes/ (10 wireframes)
-        │       ├── announcement/ (2 wireframes)
-        │       ├── e-commerce/ (4 wireframes)
-        │       ├── newsletter/ (1 wireframe)
-        │       ├── promotional/ (2 wireframes)
-        │       └── welcome/ (1 wireframe)
-        └── landing-page/
-            ├── templates/ (8 templates)
-            │   ├── agency/ (1 template)
-            │   ├── ecommerce/ (2 templates)
-            │   └── saas/ (5 templates)
-            └── wireframes/ (10 wireframes)
-                ├── agency/ (2 wireframes)
-                ├── app/ (1 wireframe)
-                ├── ecommerce/ (2 wireframes)
-                ├── saas/ (3 wireframes)
-                └── startup/ (2 wireframes)</pre>
+│   App.css
+│   App.tsx
+│   index.css
+│   main.tsx
+│   vite-env.d.ts
+│
+├───assets
+│   └───generator-assets
+│       ├───email
+│       │   ├───templates
+│       │   │   │   index.js
+│       │   │   │
+│       │   │   ├───announcement
+│       │   │   │   ├───announcement-01
+│       │   │   │   │       metadata.json
+│       │   │   │   │
+│       │   │   │   └───announcement-02
+│       │   │   │           metadata.json
+│       │   │   │
+│       │   │   ├───ecommerce
+│       │   │   │   ├───ecommerce-01
+│       │   │   │   │       metadata.json
+│       │   │   │   │
+│       │   │   │   ├───ecommerce-02
+│       │   │   │   │       metadata.json
+│       │   │   │   │
+│       │   │   │   └───ecommerce-03
+│       │   │   │           metadata.json
+│       │   │   │
+│       │   │   ├───newsletter
+│       │   │   │   ├───newsletter-01
+│       │   │   │   │       metadata.json
+│       │   │   │   │
+│       │   │   │   └───newsletter-02
+│       │   │   │           metadata.json
+│       │   │   │
+│       │   │   └───promotional
+│       │   │       ├───promotional-01
+│       │   │       │       metadata.json
+│       │   │       │
+│       │   │       ├───promotional-02
+│       │   │       │       metadata.json
+│       │   │       │
+│       │   │       ├───promotional-03
+│       │   │       │       metadata.json
+│       │   │       │
+│       │   │       └───promotional-04
+│       │   │               metadata.json
+│       │   │
+│       │   └───wireframes
+│       │       │   index.js
+│       │       │
+│       │       ├───announcement
+│       │       │   ├───announcement-wireframe-01
+│       │       │   │       metadata.json
+│       │       │   │
+│       │       │   └───announcement-wireframe-02
+│       │       │           metadata.json
+│       │       │
+│       │       ├───e-commerce
+│       │       │   ├───ecommerce-wireframe-01
+│       │       │   │       metadata.json
+│       │       │   │
+│       │       │   ├───ecommerce-wireframe-02
+│       │       │   │       metadata.json
+│       │       │   │
+│       │       │   ├───ecommerce-wireframe-03
+│       │       │   │       metadata.json
+│       │       │   │
+│       │       │   └───ecommerce-wireframe-04
+│       │       │           metadata.json
+│       │       │
+│       │       ├───newsletter
+│       │       │   └───newsletter-wireframe-01
+│       │       │           metadata.json
+│       │       │
+│       │       ├───promotional
+│       │       │   ├───promotional-wireframe-01
+│       │       │   │       metadata.json
+│       │       │   │
+│       │       │   └───promotional-wireframe-02
+│       │       │           metadata.json
+│       │       │
+│       │       └───welcome
+│       │           └───welcome-wireframe-01
+│       │                   metadata.json
+│       │
+│       └───landing-page
+│           ├───templates
+│           │   │   index.js
+│           │   │
+│           │   ├───agency
+│           │   │   └───agency-01
+│           │   │           metadata.json
+│           │   │
+│           │   ├───ecommerce
+│           │   │   ├───ecommerce-01
+│           │   │   │       metadata.json
+│           │   │   │
+│           │   │   └───ecommerce-02
+│           │   │           metadata.json
+│           │   │
+│           │   └───saas
+│           │       ├───saas-01
+│           │       │       metadata.json
+│           │       │
+│           │       ├───saas-02
+│           │       │       metadata.json
+│           │       │
+│           │       ├───saas-03
+│           │       │       metadata.json
+│           │       │
+│           │       ├───saas-04
+│           │       │       metadata.json
+│           │       │
+│           │       └───saas-05
+│           │               metadata.json
+│           │
+│           └───wireframes
+│               │   index.js
+│               │
+│               ├───agency
+│               │   ├───agency-wireframe-01
+│               │   │       metadata.json
+│               │   │
+│               │   └───agency-wireframe-02
+│               │           metadata.json
+│               │
+│               ├───app
+│               │   └───app-wireframe-01
+│               │           metadata.json
+│               │
+│               ├───ecommerce
+│               │   ├───ecommerce-wireframe-01
+│               │   │       metadata.json
+│               │   │
+│               │   └───ecommerce-wireframe-02
+│               │           metadata.json
+│               │
+│               ├───saas
+│               │   ├───saas-wireframe-01
+│               │   │       metadata.json
+│               │   │
+│               │   ├───saas-wireframe-02
+│               │   │       metadata.json
+│               │   │
+│               │   └───saas-wireframe-03
+│               │           metadata.json
+│               │
+│               └───startup
+│                   ├───startup-wireframe-01
+│                   │       metadata.json
+│                   │
+│                   └───startup-wireframe-02
+│                           metadata.json
+│
+├───components
+│   ├───Common
+│   │       DownloadButton.tsx
+│   │       MultiSelect.tsx
+│   │
+│   ├───Layout
+│   │       Header.tsx
+│   │       Sidebar.css
+│   │       Sidebar.tsx
+│   │
+│   ├───Modals
+│   │       AddClientModal.tsx
+│   │       EditModal.tsx
+│   │       EditPersonaModal.tsx
+│   │       GuidelinesModal.tsx
+│   │       PreviewModal.tsx
+│   │
+│   └───Pages
+│           AdsAnalysis.tsx
+│           Auth.tsx
+│           ContentCreator.tsx
+│           Dashboard.tsx
+│           EmailCalendar.tsx
+│           EmailGenerator.tsx
+│           LandingPageBuilder.tsx
+│           MarketingCalendar.tsx
+│           PersonaBuilder.tsx
+│           PromptLibrary.tsx
+│           Settings.tsx
+│           SocialCalendar.tsx
+│
+└───services
+        apiService.ts
+        assetLoader.js
+        authService.ts
+        exportService.ts</pre>
 
 ## 3. Core Application Layer
 ### 3.1 main.tsx
