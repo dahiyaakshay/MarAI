@@ -308,8 +308,8 @@ UPLOAD_DIR=uploads
 # Database Configuration
 DB_HOST=localhost
 DB_PORT=5432
-DB_NAME=marai_dev
-DB_USER=marai_user
+DB_NAME=marai_db
+DB_USER=postgres
 DB_PASSWORD=your_secure_password
 DB_MAX_CONNECTIONS=10
 DB_MIN_CONNECTIONS=2
@@ -1533,8 +1533,8 @@ import { Pool, PoolConfig } from 'pg';
 const poolConfig: PoolConfig = {
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '5432'),
-  database: process.env.DB_NAME || 'marai_dev',
-  user: process.env.DB_USER || 'marai_user',
+  database: process.env.DB_NAME || 'marai_db',
+  user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD,
   min: parseInt(process.env.DB_MIN_CONNECTIONS || '2'),
   max: parseInt(process.env.DB_MAX_CONNECTIONS || '10'),
@@ -5109,7 +5109,7 @@ curl -X POST https://api.anthropic.com/v1/messages \
 ### Database Connection Issues
 ```bash
 # Test PostgreSQL connection
-psql -h localhost -p 5432 -U marai_user -d marai_dev
+psql -h localhost -p 5432 -U postgres -d marai_db
 
 # Check database status
 systemctl status postgresql
@@ -5118,7 +5118,7 @@ systemctl status postgresql
 psql -U postgres -c "\l" | grep marai
 
 # Check table creation
-psql -U marai_user -d marai_dev -c "\dt"
+psql -U postgres -d marai_db -c "\dt"
 
 # Test connection from Node.js
 node -e "
@@ -5126,8 +5126,8 @@ const { Pool } = require('pg');
 const pool = new Pool({
   host: 'localhost',
   port: 5432,
-  database: 'marai_dev',
-  user: 'marai_user',
+  database: 'marai_db',
+  user: 'postgres',
   password: 'your_password'
 });
 pool.query('SELECT NOW()', (err, res) => {
@@ -5154,8 +5154,8 @@ curl -X GET http://localhost:3001/api/auth/me \
   -H "Authorization: Bearer YOUR_TOKEN_HERE"
 
 # Check database for users/tokens
-psql -U marai_user -d marai_dev -c "SELECT email, created_at FROM users;"
-psql -U marai_user -d marai_dev -c "SELECT user_id, expires_at FROM tokens WHERE expires_at > NOW();"
+psql -U postgres -d marai_db -c "SELECT email, created_at FROM users;"
+psql -U postgres -d marai_db -c "SELECT user_id, expires_at FROM tokens WHERE expires_at > NOW();"
 ```
 
 ### Token Creation Issues
@@ -5164,14 +5164,14 @@ psql -U marai_user -d marai_dev -c "SELECT user_id, expires_at FROM tokens WHERE
 # Root Cause: TokenModel.createToken() expects object format, not direct ID
 
 # Check for null user_id tokens in database
-psql -U marai_user -d marai_dev -c "
+psql -U postgres -d marai_db -c "
 SELECT user_id, created_at, expires_at 
 FROM tokens 
 WHERE user_id IS NULL;
 "
 
 # Verify correct token creation
-psql -U marai_user -d marai_dev -c "
+psql -U postgres -d marai_db -c "
 SELECT user_id, created_at, expires_at 
 FROM tokens 
 WHERE user_id IS NOT NULL 
@@ -5186,19 +5186,19 @@ ORDER BY created_at DESC LIMIT 5;
 ### Database Migration Issues
 ```bash
 # Check if tables exist
-psql -U marai_user -d marai_dev -c "\dt"
+psql -U postgres -d marai_db -c "\dt"
 
 # Manually run migrations
-psql -U marai_user -d marai_dev -f src/migrations/001_create_users_table.sql
-psql -U marai_user -d marai_dev -f src/migrations/002_create_tokens_table.sql
+psql -U postgres -d marai_db -f src/migrations/001_create_users_table.sql
+psql -U postgres -d marai_db -f src/migrations/002_create_tokens_table.sql
 
 # Check table structure
-psql -U marai_user -d marai_dev -c "\d users"
-psql -U marai_user -d marai_dev -c "\d tokens"
+psql -U postgres -d marai_db -c "\d users"
+psql -U postgres -d marai_db -c "\d tokens"
 
 # Verify constraints and indexes
-psql -U marai_user -d marai_dev -c "\d+ users"
-psql -U marai_user -d marai_dev -c "\d+ tokens"
+psql -U postgres -d marai_db -c "\d+ users"
+psql -U postgres -d marai_db -c "\d+ tokens"
 ```
 
 ### Profile Summary Function Issues
@@ -5208,7 +5208,7 @@ psql -U marai_user -d marai_dev -c "\d+ tokens"
 # Error: function get_user_initials(integer) does not exist
 
 # Create missing PostgreSQL utility functions
-psql -U marai_user -d marai_dev -c "
+psql -U postgres -d marai_db -c "
 CREATE OR REPLACE FUNCTION get_user_display_name(user_id INTEGER)
 RETURNS TEXT AS \$\$
 DECLARE
@@ -5233,7 +5233,7 @@ END;
 "
 
 # Create user initials function
-psql -U marai_user -d marai_dev -c "
+psql -U postgres -d marai_db -c "
 CREATE OR REPLACE FUNCTION get_user_initials(user_id INTEGER)
 RETURNS TEXT AS \$\$
 DECLARE
@@ -5258,7 +5258,7 @@ END;
 "
 
 # Test the functions
-psql -U marai_user -d marai_dev -c "
+psql -U postgres -d marai_db -c "
 SELECT get_user_display_name(1) as display_name, get_user_initials(1) as initials;
 "
 ```
@@ -5272,13 +5272,13 @@ curl -X POST http://localhost:3001/api/auth/login \
   | jq '.data.token'
 
 # Verify token in database (should be hashed)
-psql -U marai_user -d marai_dev -c "SELECT token_hash, expires_at FROM tokens WHERE user_id = 1;"
+psql -U postgres -d marai_db -c "SELECT token_hash, expires_at FROM tokens WHERE user_id = 1;"
 
 # Test token expiration
-psql -U marai_user -d marai_dev -c "UPDATE tokens SET expires_at = NOW() - INTERVAL '1 hour' WHERE user_id = 1;"
+psql -U postgres -d marai_db -c "UPDATE tokens SET expires_at = NOW() - INTERVAL '1 hour' WHERE user_id = 1;"
 
 # Manual cleanup of expired tokens
-psql -U marai_user -d marai_dev -c "SELECT cleanup_expired_tokens();"
+psql -U postgres -d marai_db -c "SELECT cleanup_expired_tokens();"
 ```
 
 ### Memory Issues
@@ -5455,7 +5455,7 @@ transporter.verify((error, success) => {
 "
 
 # Check email logs in database
-psql -U marai_user -d marai_dev -c "SELECT * FROM email_logs ORDER BY sent_at DESC LIMIT 10;"
+psql -U postgres -d marai_db -c "SELECT * FROM email_logs ORDER BY sent_at DESC LIMIT 10;"
 
 # Common Error: createTransporter is not a function
 # Cause: Wrong method name in nodemailer
@@ -5472,7 +5472,7 @@ console.log('createTransport exists:', typeof nodemailer.createTransport);
 ### Verification Code Issues
 ```bash
 # Check verification code in database (should be hashed)
-psql -U marai_user -d marai_dev -c "
+psql -U postgres -d marai_db -c "
 SELECT user_id, expires_at, attempts, verified_at 
 FROM email_verifications 
 WHERE user_id = 1 
@@ -5491,7 +5491,7 @@ curl -X POST http://localhost:3001/api/auth/verify-email \
   -d '{"code":"123456"}'
 
 # Check verification rate limits
-psql -U marai_user -d marai_dev -c "
+psql -U postgres -d marai_db -c "
 SELECT recipient_email, COUNT(*) as email_count
 FROM email_logs 
 WHERE email_type = 'verification' 
@@ -5500,10 +5500,10 @@ GROUP BY recipient_email;
 "
 
 # Manual cleanup of expired verifications
-psql -U marai_user -d marai_dev -c "SELECT cleanup_expired_verifications();"
+psql -U postgres -d marai_db -c "SELECT cleanup_expired_verifications();"
 
 # Reset verification attempts for testing
-psql -U marai_user -d marai_dev -c "
+psql -U postgres -d marai_db -c "
 UPDATE email_verifications 
 SET attempts = 0 
 WHERE user_id = 1 AND expires_at > NOW();
@@ -5528,14 +5528,14 @@ curl -X POST http://localhost:3001/api/auth/reset-password \
   }'
 
 # Check password reset records
-psql -U marai_user -d marai_dev -c "
+psql -U postgres -d marai_db -c "
 SELECT user_id, expires_at, attempts, used_at, ip_address
 FROM password_resets 
 ORDER BY created_at DESC LIMIT 10;
 "
 
 # Check password reset rate limiting
-psql -U marai_user -d marai_dev -c "
+psql -U postgres -d marai_db -c "
 SELECT email, COUNT(*) as attempt_count, MAX(attempted_at) as last_attempt
 FROM password_reset_attempts 
 WHERE attempted_at > NOW() - INTERVAL '1 hour'
@@ -5543,7 +5543,7 @@ GROUP BY email;
 "
 
 # Verify token invalidation after password reset
-psql -U marai_user -d marai_dev -c "
+psql -U postgres -d marai_db -c "
 SELECT COUNT(*) as active_tokens
 FROM tokens 
 WHERE user_id = 1 AND expires_at > NOW();
@@ -5569,7 +5569,7 @@ curl -X GET http://localhost:3001/api/auth/me \
   | jq '.data.profileSummary'
 
 # Verify email verification status
-psql -U marai_user -d marai_dev -c "
+psql -U postgres -d marai_db -c "
 SELECT id, email, email_verified, first_name, last_name
 FROM users 
 WHERE email = 'test@example.com';
