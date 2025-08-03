@@ -16,7 +16,11 @@
 12. State Management Implementation
 13. Export & Download System
 14. Development Patterns
-
+15. Enhanced Authentication System
+16. Email Verification & Password Reset
+17. Enhanced User Profile Management
+18. Authentication UI Components
+    
 ## 1. Architecture Overview
 ### 1.1 Current Technology Stack
 - Frontend: React with TypeScript
@@ -32,8 +36,8 @@
 - Entry Point: main.tsx
 - Main App: App.tsx
 - Styling: App.css, index.css, Sidebar.css
-- Services: apiService.ts, assetLoader.js, exportService.ts
-- Components: Layout, Common, Modals (5 modals), Pages (11 main tools)
+- Services: apiService.ts, authService.ts, assetLoader.js, exportService.ts
+- Components: Layout, Common, Modals (5 modals), Pages (11 main tools with enhanced authentication)
 
 ### 1.3 Core Dependencies
 - React 18 with TypeScript
@@ -564,6 +568,80 @@ async validateAnthropicKey(apiKey: string): Promise<ApiResponse> {
 }
 ```
 
+#### Enhanced Authentication Methods:
+```typescript
+/**
+ * Enhanced user signup with profile fields
+ */
+async signup(signupData: SignupData): Promise<ApiResponse> {
+  return this.makeRequest('auth/signup', {
+    method: 'POST',
+    body: JSON.stringify(signupData)
+  });
+}
+
+/**
+ * Send email verification code
+ */
+async sendVerificationCode(): Promise<ApiResponse> {
+  return this.makeRequest('auth/send-verification', {
+    method: 'POST'
+  });
+}
+
+/**
+ * Verify email with 6-digit code
+ */
+async verifyEmail(verificationData: VerificationData): Promise<ApiResponse> {
+  return this.makeRequest('auth/verify-email', {
+    method: 'POST',
+    body: JSON.stringify(verificationData)
+  });
+}
+
+/**
+ * Request password reset code
+ */
+async forgotPassword(forgotData: ForgotPasswordData): Promise<ApiResponse> {
+  return this.makeRequest('auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify(forgotData)
+  });
+}
+
+/**
+ * Reset password with code
+ */
+async resetPassword(resetData: ResetPasswordData): Promise<ApiResponse> {
+  return this.makeRequest('auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify(resetData)
+  });
+}
+```
+
+#### Profile Management Methods:
+```typescript
+/**
+ * Update user profile
+ */
+async updateProfile(profileData: UpdateProfileData): Promise<ApiResponse> {
+  return this.makeRequest('auth/profile', {
+    method: 'PUT',
+    body: JSON.stringify(profileData)
+  });
+}
+
+/**
+ * Get current user with profile summary
+ */
+async getCurrentUser(): Promise<ApiResponse> {
+  return this.makeRequest('auth/me', {
+    method: 'GET'
+  });
+}
+```
+
 #### Authentication Integration Methods:
 ```typescript
 isUserAuthenticated(): boolean
@@ -924,9 +1002,45 @@ interface HeaderProps {
   clients: Record<string, { name: string; data: any }>;
   switchClient: (clientId: string) => void;
   openAddClientModal: () => void;
-  user: User | null;              // New
-  onLogout: () => void;           // New
+  user: User | null;
+  userProfileSummary?: UserProfileSummary | null;  // NEW
+  onLogout: () => void;
+  navigateToPage?: (page: string) => void;         // NEW
 }
+```
+
+#### Enhanced User Display Logic:
+```typescript
+// Enhanced user initials generation using profile data
+const getUserInitials = (user: User): string => {
+  if (!user) return 'U';
+  
+  // Use profile summary if available
+  if (userProfileSummary?.initials) {
+    return userProfileSummary.initials;
+  }
+  
+  // Try to use first name and last name
+  if (user.firstName && user.lastName) {
+    return `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`.toUpperCase();
+  }
+  
+  // Fallback to email-based generation
+  return user.email.substring(0, 2).toUpperCase();
+};
+```
+
+#### Email Verification Indicators:
+```typescript
+// Verification indicators on avatar
+<div className="user-avatar">
+  {getUserInitials(user)}
+  {!user.emailVerified && (
+    <div className="verification-indicator unverified">
+      <AlertCircle size={8} />
+    </div>
+  )}
+</div>
 ```
 
 Renders theme toggle button, client dropdown, and add client button.
@@ -1033,7 +1147,216 @@ const contentTypes = [
 ```
 
 ### 6.2 Auth.tsx
-Purpose: User authentication page with login and signup functionality
+Purpose: Complete authentication system with email verification, password reset, and enhanced user profiles
+
+#### Authentication Modes:
+```typescript
+type AuthMode = 'login' | 'signup' | 'verification' | 'forgot-password' | 'reset-password';
+```
+
+#### Enhanced Form Data Structure:
+```typescript
+interface FormData {
+  email: string;
+  password: string;
+  confirmPassword: string;
+  firstName: string;        // NEW
+  lastName: string;         // NEW
+  profession: string;       // NEW
+  country: string;          // NEW
+}
+```
+
+#### Email Verification Flow:
+```typescript
+// Email Verification Component
+{mode === 'verification' && (
+  <div className="form-group">
+    <label className="input-label">
+      <KeyRound size={16} />
+      Verification Code
+    </label>
+    <input
+      type="text"
+      className="form-input verification-input"
+      placeholder="Enter 6-digit code"
+      value={verificationCode}
+      onChange={(e) => {
+        const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+        setVerificationCode(value);
+      }}
+      maxLength={6}
+      autoComplete="one-time-code"
+    />
+  </div>
+)}
+```
+          
+#### Enhanced Signup Handler:
+```typescript
+const handleSignup = async () => {
+  const response = await fetch('http://localhost:3001/api/auth/signup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: formData.email,
+      password: formData.password,
+      confirmPassword: formData.confirmPassword,
+      firstName: formData.firstName.trim() || undefined,
+      lastName: formData.lastName.trim() || undefined,
+      profession: formData.profession.trim() || undefined,
+      country: formData.country || undefined
+    })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Signup failed');
+  }
+
+  // CRITICAL FIX - Store token for immediate authentication:
+  localStorage.setItem('authToken', data.data.token);
+
+  setVerificationEmail(formData.email);
+  setSuccessMessage('Account created! Please check your email for a 6-digit verification code.');
+  setMode('verification');
+};
+```
+
+#### Enhanced Login Handler:
+```typescript
+const handleLogin = async () => {
+  const response = await fetch('http://localhost:3001/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ 
+      email: formData.email, 
+      password: formData.password 
+    })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Login failed');
+  }
+
+  // CRITICAL FIX - Store authentication token:
+  localStorage.setItem('authToken', data.data.token);
+
+  onAuthSuccess(data.data.user, data.data.token);
+};
+```
+
+#### Password Reset Flow with ResetId Security:
+```typescript
+// State management for password reset
+const [resetId, setResetId] = useState('');
+
+// Forgot Password Handler with resetId storage
+const handleForgotPassword = async () => {
+  const response = await fetch('http://localhost:3001/api/auth/forgot-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: formData.email })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to send reset code');
+  }
+
+  // CRITICAL FIX - Store resetId for backend validation:
+  setResetId(data.data.resetId);
+  
+  setSuccessMessage('Password reset code sent! Please check your email.');
+  setMode('reset-password');
+};
+
+// Reset Password Handler with resetId validation
+const handleResetPassword = async () => {
+  const response = await fetch('http://localhost:3001/api/auth/reset-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      resetId: resetId,        // CRITICAL FIX - Include resetId
+      code: resetCode,
+      newPassword: newPassword,
+      confirmNewPassword: confirmNewPassword
+    })
+  });
+
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.error || 'Password reset failed');
+  }
+
+  setSuccessMessage('Password reset successful! Please log in with your new password.');
+  setMode('login');
+};
+```
+
+#### Enhanced Mode Switching with State Cleanup:
+```typescript
+const switchMode = (newMode: AuthMode) => {
+  setMode(newMode);
+  setFormData({ 
+    email: mode === 'forgot-password' ? formData.email : '', 
+    password: '', 
+    confirmPassword: '', 
+    firstName: '', 
+    lastName: '', 
+    profession: '', 
+    country: '' 
+  });
+  setErrors({});
+  setSuccessMessage('');
+  setVerificationCode('');
+  setResetCode('');
+  setResetId('');        // CRITICAL FIX - Clear resetId on mode switch
+  setNewPassword('');
+  setConfirmNewPassword('');
+};
+```
+
+#### Enhanced Email Verification with Authorization:
+```typescript
+const handleVerifyEmail = async () => {
+  if (!verificationCode || verificationCode.length !== 6) {
+    setErrors({ general: 'Please enter a valid 6-digit code' });
+    return;
+  }
+
+  const response = await fetch('http://localhost:3001/api/auth/verify-email', {
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'application/json',
+      // CRITICAL FIX - Include Authorization header for proper authentication:
+      'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+    },
+    body: JSON.stringify({ code: verificationCode })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Email verification failed');
+  }
+
+  setSuccessMessage('Email verified successfully! You can now access all features.');
+  // Update user verification status or redirect as needed
+};
+```
+
+#### Password Reset Security Features:
+- Unique Reset IDs: Backend generates unique resetId for each reset request
+- Request Validation: Frontend stores and includes resetId with code submission
+- Code Security: Backend validates that reset code belongs to specific reset request
+- State Management: Proper cleanup of resetId when switching authentication modes
+- Token Storage: Immediate token storage after successful authentication flows
 
 #### Dual Mode Interface:
 ```typescript
@@ -1691,6 +2014,61 @@ const getStatusIcon = () => {
   if (apiKey.isValid === true) return <CheckCircle size={16} style={{ color: 'var(--success-color)' }} />;
   if (apiKey.isValid === false) return <XCircle size={16} style={{ color: 'var(--error-color)' }} />;
   return null;
+};
+```
+
+#### Enhanced User Profile Interface:
+```typescript
+interface UserProfile {
+  id: number;
+  email: string;
+  firstName?: string;       // NEW
+  lastName?: string;        // NEW
+  profession?: string;      // NEW
+  country?: string;         // NEW
+  emailVerified: boolean;   // NEW
+  created_at: string;
+}
+```
+
+#### Email Verification Status Section:
+```typescript
+{/* Email Verification Status */}
+<div className="verification-status">
+  <div className="verification-info">
+    <Mail size={16} />
+    <span>Email Verification</span>
+    {profile.emailVerified ? (
+      <div className="verified-badge">
+        <CheckCircle size={14} />
+        Verified
+      </div>
+    ) : (
+      <div className="unverified-badge">
+        <AlertCircle size={14} />
+        Not Verified
+      </div>
+    )}
+  </div>
+</div>
+```
+
+#### Backend API Integration:
+```typescript
+// Load User Data from Backend
+const loadUserData = async () => {
+  const response = await fetch('http://localhost:3001/api/auth/me', {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+    }
+  });
+  
+  if (response.ok) {
+    const data = await response.json();
+    setProfile(data.data.user);
+  }
 };
 ```
 
@@ -3143,30 +3521,344 @@ clearAuthData(): void {
 - Fallback parsing for AI responses
 - Input validation and boundary checking
 
-## 15. Key Implementation Notes
-### 15.1 File System Integration
+## 15. Enhanced Authentication System
+### 15.1 Authentication Architecture
+The application now features a comprehensive authentication system with:
+- Email verification with 6-digit codes sent from akddme@gmail.com
+- Password reset functionality with secure code verification
+- Enhanced user profiles with additional fields
+- Session management with automatic token handling
+- Real-time email verification status tracking
+
+### 15.2 Authentication Flow States
+```typescript
+type AuthMode = 'login' | 'signup' | 'verification' | 'forgot-password' | 'reset-password';
+
+interface SignupData {
+  email: string;
+  password: string;
+  confirmPassword: string;
+  firstName?: string;
+  lastName?: string;
+  profession?: string;
+  country?: string;
+}
+```
+
+### 15.3 Enhanced User Data Structure
+```typescript
+interface User {
+  id: number;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  profession?: string;
+  country?: string;
+  emailVerified: boolean;
+  created_at: string;
+}
+
+interface UserProfileSummary {
+  displayName: string;
+  initials: string;
+  profileCompletion: number;
+  emailVerified: boolean;
+}
+```
+
+### 15.4 Session Management Integration
+- Automatic session restoration on app startup
+- Token-based authentication with backend API integration
+- Global authentication error handling with automatic logout
+- Enhanced user display with profile completion tracking
+
+### 15.5 Critical Authentication Fixes
+#### Token Storage Resolution:
+The application now properly handles authentication token storage across all authentication flows:
+
+**Problems Resolved:**
+- ❌ Authentication tokens weren't being saved to localStorage after successful login/signup
+- ❌ Password reset flow was missing resetId handling, causing backend validation errors
+- ❌ 401 Unauthorized errors during email verification due to missing Authorization headers
+
+**Solutions Implemented:**
+- ✅ **Token Storage**: Immediate localStorage token storage in both login and signup handlers
+- ✅ **ResetId Security**: Proper resetId state management for password reset flow validation
+- ✅ **Authorization Headers**: Enhanced email verification with proper Bearer token authentication
+- ✅ **State Cleanup**: Comprehensive state clearing when switching between authentication modes
+
+#### Impact:
+These critical fixes resolved all 401 Unauthorized errors and password reset validation errors, ensuring seamless authentication flow throughout the application.
+
+#### Security Enhancements:
+- **Request Integrity**: Each password reset generates unique resetId for backend validation
+- **Token Persistence**: Proper session management with immediate token storage
+- **Authorization Context**: All authenticated requests include proper Bearer token headers
+- **State Isolation**: Clean state transitions prevent authentication data leakage between modes
+  
+## 16. Email Verification & Password Reset
+### 16.1 Email Verification System
+#### 6-Digit Code Verification:
+```typescript
+// Email verification input with auto-formatting
+<input
+  type="text"
+  className="form-input verification-input"
+  placeholder="Enter 6-digit code"
+  value={verificationCode}
+  onChange={(e) => {
+    const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+    setVerificationCode(value);
+  }}
+  maxLength={6}
+  autoComplete="one-time-code"
+/>
+```
+
+#### Verification Status Integration:
+```typescript
+// Email verification status display
+{profile.emailVerified ? (
+  <div className="verified-badge">
+    <CheckCircle size={14} />
+    Verified
+  </div>
+) : (
+  <div className="unverified-badge">
+    <AlertCircle size={14} />
+    Not Verified
+  </div>
+)}
+```
+
+### 16.2 Password Reset Flow
+#### Reset Code Verification:
+```typescript
+// Password reset with 6-digit code
+{mode === 'reset-password' && (
+  <div className="form-group">
+    <label className="input-label">
+      <KeyRound size={16} />
+      Reset Code
+    </label>
+    <input
+      type="text"
+      className="form-input verification-input"
+      placeholder="Enter 6-digit code"
+      value={resetCode}
+      onChange={(e) => {
+        const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+        setResetCode(value);
+      }}
+      maxLength={6}
+    />
+  </div>
+)}
+```
+          
+### 16.3 Email Service Integration
+- Emails sent from akddme@gmail.com
+- 6-digit verification codes for both email verification and password reset
+- Automatic code expiration and resend functionality
+- Professional email templates with MarAI branding
+
+## 17. Enhanced User Profile Management
+### 17.1 Extended Profile Fields
+#### Registration Profile Fields:
+```typescript
+// Enhanced registration form with profile fields
+<div className="form-grid">
+  <div className="form-group">
+    <label className="input-label">
+      <User size={16} />
+      First Name (Optional)
+    </label>
+    <input
+      type="text"
+      className="form-input"
+      placeholder="Enter first name"
+      value={formData.firstName}
+      onChange={(e) => handleInputChange('firstName', e.target.value)}
+    />
+  </div>
+  
+  <div className="form-group">
+    <label className="input-label">
+      <Briefcase size={16} />
+      Profession (Optional)
+    </label>
+    <input
+      type="text"
+      className="form-input"
+      placeholder="e.g. Marketing Manager, Business Owner"
+      value={formData.profession}
+      onChange={(e) => handleInputChange('profession', e.target.value)}
+    />
+  </div>
+</div>
+```
+
+### 17.2 Profile Completion Tracking
+#### Visual Progress Indicators:
+```typescript
+// Profile completion progress bar
+{profileSummary.profileCompletion > 0 && (
+  <div className="profile-completion">
+    <div className="completion-header">
+      <span>Profile Completion</span>
+      <span>{profileSummary.profileCompletion}%</span>
+    </div>
+    <div className="progress-bar">
+      <div 
+        className="progress-fill" 
+        style={{ width: `${profileSummary.profileCompletion}%` }}
+      ></div>
+    </div>
+  </div>
+)}
+```
+
+### 17.3 Backend Profile Synchronization
+#### Profile Update Integration:
+```typescript
+// Save profile to backend with validation
+const saveProfile = async () => {
+  const response = await fetch('http://localhost:3001/api/auth/profile', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+    },
+    body: JSON.stringify({
+      firstName: profile.firstName?.trim() || undefined,
+      lastName: profile.lastName?.trim() || undefined,
+      profession: profile.profession?.trim() || undefined,
+      country: profile.country || undefined
+    })
+  });
+};
+```
+
+### 17.4 Enhanced User Display
+- Dynamic display name generation from profile fields
+- Smart avatar initials using firstName/lastName
+- Profile completion percentage in header dropdown
+- Country selection with comprehensive country list
+
+## 18. Authentication UI Components
+### 18.1 Dynamic Authentication Titles
+#### Context-Aware UI Text:
+```typescript
+const getTitle = () => {
+  switch (mode) {
+    case 'login': return 'Welcome Back';
+    case 'signup': return 'Create Account';
+    case 'verification': return 'Verify Email';
+    case 'forgot-password': return 'Reset Password';
+    case 'reset-password': return 'Enter New Password';
+    default: return 'Welcome';
+  }
+};
+
+const getSubtitle = () => {
+  switch (mode) {
+    case 'login': return 'Sign in to your MarAI account to continue';
+    case 'signup': return 'Get started with your MarAI marketing automation journey';
+    case 'verification': return `Enter the 6-digit code sent to ${verificationEmail}`;
+    case 'forgot-password': return 'Enter your email to receive a password reset code';
+    case 'reset-password': return 'Enter the code from your email and create a new password';
+    default: return '';
+  }
+};
+```
+
+### 18.2 Enhanced Header Integration
+#### Settings Navigation Menu:
+```typescript
+// Navigation Items in user dropdown
+<button 
+  className="user-dropdown-item"
+  onClick={handleNavigateToSettings}
+>
+  <UserIcon size={16} />
+  <span>Profile</span>
+</button>
+
+<button 
+  className="user-dropdown-item"
+  onClick={handleNavigateToSettings}
+>
+  <Settings size={16} />
+  <span>Settings</span>
+</button>
+
+{!user.emailVerified && (
+  <button 
+    className="user-dropdown-item verification-item"
+    onClick={handleNavigateToSettings}
+  >
+    <Mail size={16} />
+    <span>Verify Email</span>
+    <div className="notification-badge">!</div>
+  </button>
+)}
+```
+
+### 18.3 Country Selection Support
+#### Comprehensive Country List:
+- 195+ countries in alphabetical order
+- Integrated in both registration and settings
+- Optional field with user-friendly placeholder
+- Form validation and error handling
+
+### 18.4 Enhanced Error Handling
+#### Authentication-Specific Error Messages:
+```typescript
+const handleApiError = (error: any): string => {
+  if (error.message?.includes('Session expired')) {
+    return 'Your session has expired. Please log in again.';
+  }
+  if (error.message?.includes('Email not verified')) {
+    return 'Please verify your email address to continue.';
+  }
+  if (error.message?.includes('Verification code')) {
+    return 'Invalid or expired verification code. Please try again.';
+  }
+  return error.message || 'An unexpected error occurred.';
+};
+```
+
+### 18.5 Backward Compatibility
+All enhanced authentication features maintain full compatibility with existing MarAI functionality:
+- AI generation tools continue to work seamlessly
+- Existing localStorage patterns preserved
+- Client management system unchanged
+- All modal and component interactions maintained
+
+## 19. Key Implementation Notes
+### 19.1 File System Integration
 The application references window.fs.readFile API but this appears to be a custom implementation not standard browser File API.
 
-### 15.2 Asset Loading Strategy
+### 19.2 Asset Loading Strategy
 - Templates and wireframes are loaded dynamically from index.js files
 - HTML content is fetched via HTTP requests
 - Graceful degradation for missing files
 - Error handling with user-friendly messages
 
-### 15.3 Conversation Context Management
+### 19.3 Conversation Context Management
 - 50k token limit enforced across all AI components
 - Visual indicators for session status
 - Automatic session reset functionality
 - Context preservation across multiple interactions
 
-### 15.4 Platform-Specific Features
+### 19.4 Platform-Specific Features
 - Email generator focuses on email-client compatibility with GuidelinesModal education
 - Landing page builder supports multiple frameworks with multi-file ZIP output
 - Social calendar includes platform-specific optimizations
 - Content creator supports universal content types
 - Ads analysis provides data intelligence with Excel/CSV processing
 
-### 15.5 Authentication System Integration
+### 19.5 Authentication System Integration
 #### Session Management Strategy:
 - Opaque token-based authentication with server-side validation
 - Automatic session initialization on app startup with loading states
@@ -3185,7 +3877,7 @@ The application references window.fs.readFile API but this appears to be a custo
 - User context availability for enhanced AI features when authenticated
 - Backward compatibility maintained for all existing functionality
   
-### 15.6 New Capabilities Added
+### 19.6 New Capabilities Added
 - **GuidelinesModal**: Comprehensive AI prompting education system with 4-tab interface
 - **AdsAnalysis**: Professional data analysis with Excel processing and HTML reports
 - **Multi-File Landing Pages**: ZIP packaging with platform-specific code separation
