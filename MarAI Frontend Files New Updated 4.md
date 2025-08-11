@@ -51,12 +51,17 @@
 - file-saver: File download handling
 - ExcelJS: Excel file processing 
 
-### 1.4 Client Management System
-- **Full CRUD Operations**: Create, read, update, delete clients with backend persistence
-- **Content Organization**: All generated content automatically associated with selected client
+### 1.4 Enhanced Client Management System (Database-Backed)
+- **Complete Transformation**: Upgraded from localStorage demo to PostgreSQL database persistence
+- **Real CRUD Operations**: Create, read, update, delete clients with backend persistence at /api/clients
+- **Client-Content Association**: All generated content automatically associated with selected client
+- **Database Schema Integration**: Full PostgreSQL integration with proper foreign key relationships
+- **Professional UX**: Loading states, error handling, success feedback throughout client operations
+- **Type Safety**: Complete TypeScript interfaces (Client, CreateClientData, UpdateClientData)
+- **Authentication Integration**: Client data properly scoped to authenticated users
+- **Content Organization**: Foundation for client-specific filtering and analytics
 - **Safety Features**: Multi-layer deletion protection with content impact statistics
-- **Real-time Validation**: Form validation with immediate feedback and error handling
-- **Statistics Integration**: Client content analytics and dashboard integration
+- **Real-time Validation**: Form validation with immediate feedback and comprehensive error handling
   
 ## 2. Project Structure
 Based on imports and file organization:
@@ -346,7 +351,14 @@ const pageData = {
 ```typescript
 const [activePage, setActivePage] = useState('dashboard');
 const [theme, setTheme] = useState('dark');
-const [currentClient, setCurrentClient] = useState('default');
+
+// TRANSFORMED: Real Client Management (Database-Backed)
+const [clients, setClients] = useState<Client[]>([]);
+const [currentClient, setCurrentClient] = useState<Client | null>(null);
+const [clientsLoading, setClientsLoading] = useState(false);
+const [clientsError, setClientsError] = useState<string | null>(null);
+
+// Modal Management
 const [editModalOpen, setEditModalOpen] = useState(false);
 const [addClientModalOpen, setAddClientModalOpen] = useState(false);
 const [editPersonaModalOpen, setEditPersonaModalOpen] = useState(false);
@@ -357,11 +369,14 @@ const [previewModalData, setPreviewModalData] = useState(null);
 const [guidelinesModalType, setGuidelinesModalType] = useState<'email' | 'landing-page'>('email');
 
 // Enhanced Client Management State
-const [clients, setClients] = useState<Client[]>([]);
 const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 const [editClientModalOpen, setEditClientModalOpen] = useState(false);
 const [deleteClientModalOpen, setDeleteClientModalOpen] = useState(false);
-const [clientLoading, setClientLoading] = useState(false);
+
+// Authentication State (Enhanced)
+const [user, setUser] = useState<User | null>(null);
+const [isAuthenticated, setIsAuthenticated] = useState(false);
+const [authLoading, setAuthLoading] = useState(true);
 ```
 
 #### Enhanced Client Management Handlers:
@@ -407,15 +422,15 @@ const closeDeleteClientModal = () => {
 
 const handleClientUpdated = (updatedClient: Client) => {
   setClients(prev => prev.map(c => c.id === updatedClient.id ? updatedClient : c));
-  setCurrentClient(updatedClient.id.toString());
+  setCurrentClient(updatedClient); 
   closeEditClientModal();
 };
 
 const handleClientDeleted = (clientId: number) => {
   setClients(prev => prev.filter(c => c.id !== clientId));
-  if (currentClient === clientId.toString()) {
-    setCurrentClient('default');
-  }
+  if (currentClient?.id === clientId) {
+  setCurrentClient(clients.find(c => c.id !== clientId) || null);
+}
   closeDeleteClientModal();
 };
 
@@ -621,25 +636,32 @@ onUse={(data) => {
 #### Page Routing:
 ```typescript
 const renderActivePage = () => {
+  // Common props for client context integration
+  const commonProps = {
+    currentClient,
+    clients,
+    refreshClients: loadClients
+  };
+
   switch (activePage) {
     case 'dashboard':
-      return <Dashboard navigateToPage={navigateToPage} />;
+      return <Dashboard {...commonProps} navigateToPage={navigateToPage} />;
     case 'marketing-calendar':
-      return <MarketingCalendar openEditModal={openEditModal} />;
+      return <MarketingCalendar {...commonProps} openEditModal={openEditModal} />;
     case 'social-calendar':
-      return <SocialCalendar openEditModal={openEditModal} />;
+      return <SocialCalendar {...commonProps} openEditModal={openEditModal} />;
     case 'email-calendar':
-      return <EmailCalendar openEditModal={openEditModal} />;
+      return <EmailCalendar {...commonProps} openEditModal={openEditModal} />;
     case 'email-generator':
-      return <EmailGenerator openPreviewModal={openPreviewModal} openGuidelinesModal={openGuidelinesModal} />;
+      return <EmailGenerator {...commonProps} openPreviewModal={openPreviewModal} openGuidelinesModal={openGuidelinesModal} />;
     case 'landing-page-builder':
-      return <LandingPageBuilder openPreviewModal={openPreviewModal} openGuidelinesModal={openGuidelinesModal} />;
+      return <LandingPageBuilder {...commonProps} openPreviewModal={openPreviewModal} openGuidelinesModal={openGuidelinesModal} />;
     case 'persona-builder':
-      return <PersonaBuilder openEditPersonaModal={openEditPersonaModal} />;
+      return <PersonaBuilder {...commonProps} openEditPersonaModal={openEditPersonaModal} />;
     case 'content-creator':
-      return <ContentCreator />;
+      return <ContentCreator {...commonProps} />;
     case 'ads-analysis':
-      return <AdsAnalysis />;
+      return <AdsAnalysis {...commonProps} />;
     case 'prompt-library':
       return <PromptLibrary />;
     case 'saved-assets':                        
@@ -647,7 +669,7 @@ const renderActivePage = () => {
     case 'settings':
       return <Settings />;
     default:
-      return <Dashboard navigateToPage={navigateToPage} />;
+      return <Dashboard {...commonProps} navigateToPage={navigateToPage} />;
   }
 };
 ```
@@ -682,12 +704,12 @@ const renderActivePage = () => {
   theme={theme}
   toggleTheme={toggleTheme}
   currentClient={currentClient}
-  clients={clients}                                    // Updated from object to array
+  clients={clients} 
   switchClient={setCurrentClient}
   openAddClientModal={openAddClientModal}
-  openEditClientModal={openEditClientModal}            // NEW
-  openDeleteClientModal={openDeleteClientModal}        // NEW
-  clientLoading={clientLoading}                        // NEW
+  openEditClientModal={openEditClientModal}           
+  openDeleteClientModal={openDeleteClientModal}        
+  clientLoading={clientLoading}                        
   user={user}
   userProfileSummary={userProfileSummary}
   onLogout={handleLogout}
@@ -721,6 +743,51 @@ interface ApiResponse {
 interface ConversationMessage {
   role: 'user' | 'assistant';
   content: string;
+}
+
+// NEW: Client Management Interfaces
+interface Client {
+  id: number;
+  user_id: number;
+  company_name: string;
+  industry?: string;
+  website?: string;
+  contact_name?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  contact_role?: string;
+  target_audience?: string;
+  budget_range?: string;
+  goals?: string[];
+  description?: string;
+  brand_guidelines?: string;
+  notes?: string;
+  is_active: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+interface CreateClientData {
+  company_name: string;
+  industry?: string;
+  website?: string;
+  contact_name?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  contact_role?: string;
+  target_audience?: string;
+  budget_range?: string;
+  goals?: string[];
+  description?: string;
+  brand_guidelines?: string;
+  notes?: string;
+}
+
+interface GenerationOptions {
+  client_id?: number;
+  content_type?: string;
+  title?: string;
+  metadata?: Record<string, any>;
 }
 ```
 
@@ -772,10 +839,88 @@ private getStoredApiKeys() {
 
 #### Main Generation Method:
 ```typescript
-async generateContent(conversationHistory: ConversationMessage[]): Promise<ApiResponse> {
+async generateContent(
+  conversationHistory: ConversationMessage[], 
+  options?: GenerationOptions
+): Promise<ApiResponse> {
+  const requestBody: any = { conversationHistory };
+  
+  // Add client context if provided
+  if (options?.client_id) {
+    requestBody.client_id = options.client_id;
+  }
+  if (options?.content_type) {
+    requestBody.content_type = options.content_type;
+  }
+  if (options?.title) {
+    requestBody.title = options.title;
+  }
+  if (options?.metadata) {
+    requestBody.metadata = options.metadata;
+  }
+  
   return this.makeRequest('generate', {
     method: 'POST',
-    body: JSON.stringify({ conversationHistory })
+    body: JSON.stringify(requestBody)
+  });
+}
+```
+
+#### Client Management Methods:
+```typescript
+/**
+ * Get all clients for the authenticated user
+ */
+async getClients(): Promise<ApiResponse> {
+  return this.makeRequest('clients', {
+    method: 'GET'
+  });
+}
+
+/**
+ * Get a specific client by ID
+ */
+async getClient(clientId: number): Promise<ApiResponse> {
+  return this.makeRequest(`clients/${clientId}`, {
+    method: 'GET'
+  });
+}
+
+/**
+ * Create a new client
+ */
+async createClient(clientData: CreateClientData): Promise<ApiResponse> {
+  return this.makeRequest('clients', {
+    method: 'POST',
+    body: JSON.stringify(clientData)
+  });
+}
+
+/**
+ * Update an existing client
+ */
+async updateClient(clientId: number, updates: Partial<CreateClientData>): Promise<ApiResponse> {
+  return this.makeRequest(`clients/${clientId}`, {
+    method: 'PUT',
+    body: JSON.stringify(updates)
+  });
+}
+
+/**
+ * Delete a client
+ */
+async deleteClient(clientId: number): Promise<ApiResponse> {
+  return this.makeRequest(`clients/${clientId}`, {
+    method: 'DELETE'
+  });
+}
+
+/**
+ * Get dashboard analytics for client
+ */
+async getDashboardAnalytics(): Promise<ApiResponse> {
+  return this.makeRequest('analytics/dashboard', {
+    method: 'GET'
   });
 }
 ```
@@ -1398,7 +1543,7 @@ export interface ContentData {
 The exportService.ts file contains extensive calendar export, content export, and persona export functionality with PDF and Excel generation capabilities. It includes methods like exportCalendarPDF, exportContentPDF, exportPersonasPDF, exportCalendarExcel, etc.
 
 ### 4.5 clientService.ts
-#### Core Client Management Service:
+#### Core Client Management Service (Database-Backed):
 ```typescript
 class ClientService {
   private readonly baseUrl = 'http://localhost:3001/api/clients';
@@ -1410,16 +1555,76 @@ class ClientService {
       'Authorization': `Bearer ${token}`
     };
   }
+  
+  private async handleResponse(response: Response): Promise<ApiResponse> {
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Request failed');
+    }
+    return data;
+  }
 }
 ```
 
 #### CRUD Operations:
 ```typescript
-async getClients(includeStats: boolean = false): Promise<ApiResponse<ClientSummary[]>>
-async getClient(clientId: number): Promise<ApiResponse<Client & { stats: ClientStats }>>
-async createClient(clientData: CreateClientData): Promise<ApiResponse<Client>>
-async updateClient(clientId: number, updateData: UpdateClientData): Promise<ApiResponse<Client>>
-async deleteClient(clientId: number): Promise<ApiResponse<void>>
+/**
+ * Get all clients for authenticated user
+ */
+async getClients(includeStats: boolean = false): Promise<ApiResponse<Client[]>> {
+  const params = includeStats ? '?include_stats=true' : '';
+  const response = await fetch(`${this.baseUrl}${params}`, {
+    method: 'GET',
+    headers: this.getAuthHeaders()
+  });
+  return this.handleResponse(response);
+}
+
+/**
+ * Get single client with detailed information
+ */
+async getClient(clientId: number): Promise<ApiResponse<Client & { stats: ClientStats }>> {
+  const response = await fetch(`${this.baseUrl}/${clientId}`, {
+    method: 'GET',
+    headers: this.getAuthHeaders()
+  });
+  return this.handleResponse(response);
+}
+
+/**
+ * Create new client
+ */
+async createClient(clientData: CreateClientData): Promise<ApiResponse<Client>> {
+  const response = await fetch(this.baseUrl, {
+    method: 'POST',
+    headers: this.getAuthHeaders(),
+    body: JSON.stringify(clientData)
+  });
+  return this.handleResponse(response);
+}
+
+/**
+ * Update existing client
+ */
+async updateClient(clientId: number, updateData: Partial<CreateClientData>): Promise<ApiResponse<Client>> {
+  const response = await fetch(`${this.baseUrl}/${clientId}`, {
+    method: 'PUT',
+    headers: this.getAuthHeaders(),
+    body: JSON.stringify(updateData)
+  });
+  return this.handleResponse(response);
+}
+
+/**
+ * Delete client (with content impact protection)
+ */
+async deleteClient(clientId: number): Promise<ApiResponse<void>> {
+  const response = await fetch(`${this.baseUrl}/${clientId}`, {
+    method: 'DELETE',
+    headers: this.getAuthHeaders()
+  });
+  return this.handleResponse(response);
+}
 ```
 
 #### Client Type Definitions:
@@ -1461,39 +1666,204 @@ interface ClientStats {
 
 #### Content Management Methods:
 ```typescript
-async getClientContent(clientId: number, filters: ContentFilters = {}): Promise<ApiResponse<ClientContent[]>>
-async getClientStats(clientId: number): Promise<ApiResponse<ClientStats>>
-async toggleContentFavorite(contentId: number): Promise<ApiResponse<ClientContent>>
-async deleteContent(contentId: number): Promise<ApiResponse<void>>
+/**
+ * Save content to specific client
+ */
+async saveContentToClient(clientId: number, contentData: {
+  content_type: string;
+  title: string;
+  content: string;
+  metadata?: Record<string, any>;
+}): Promise<ApiResponse<any>> {
+  const response = await fetch(`${this.baseUrl}/${clientId}/content`, {
+    method: 'POST',
+    headers: this.getAuthHeaders(),
+    body: JSON.stringify(contentData)
+  });
+  return this.handleResponse(response);
+}
+
+/**
+ * Get client content with filtering
+ */
+async getClientContent(clientId: number, filters: {
+  content_type?: string;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<ApiResponse<any[]>> {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined) params.append(key, value.toString());
+  });
+  
+  const response = await fetch(`${this.baseUrl}/${clientId}/content?${params}`, {
+    method: 'GET',
+    headers: this.getAuthHeaders()
+  });
+  return this.handleResponse(response);
+}
+
+/**
+ * Get client statistics for dashboard
+ */
+async getDashboardAnalytics(): Promise<ApiResponse<any>> {
+  const response = await fetch(`${this.baseUrl}/analytics/dashboard`, {
+    method: 'GET',
+    headers: this.getAuthHeaders()
+  });
+  return this.handleResponse(response);
+}
 ```
 
 #### Export:
 ```typescript
 export const clientService = new ClientService();
-export type { Client, ClientStats, ClientSummary };
+export type { Client, CreateClientData, ClientStats };
 ```
 
 ## 5. Component System
 ### 5.1 Layout Components
-#### Header.tsx
+#### Header.tsx (TRANSFORMED - Database-Backed Client Management)
 ```typescript
 interface HeaderProps {
   title: string;
   subtitle: string;
   theme: string;
   toggleTheme: () => void;
-  currentClient: string;
-  clients: Client[];                           // Updated from Record to Client array
-  switchClient: (clientId: string) => void;
+  currentClient: Client | null;               // TRANSFORMED: Client object instead of string
+  clients: Client[];                          // TRANSFORMED: Real Client array from database
+  switchClient: (client: Client | null) => void;  // TRANSFORMED: Client object parameter
   openAddClientModal: () => void;
-  openEditClientModal: (client: Client) => void;     // NEW
-  openDeleteClientModal: (client: Client) => void;   // NEW
-  clientLoading: boolean;                      // NEW
+  openEditClientModal: (client: Client) => void;
+  openDeleteClientModal: (client: Client) => void;
+  clientLoading: boolean;
   user: User | null;
   userProfileSummary?: UserProfileSummary | null;
   onLogout: () => void;
   navigateToPage?: (page: string) => void;
 }
+```
+
+#### Enhanced Client Dropdown Implementation:
+```typescript
+// TRANSFORMED: Real client selection with database objects
+const getCurrentClientData = (): Client | null => {
+  return currentClient;  // Already a Client object, no need to find
+};
+
+// NEW: Enhanced client dropdown with real data
+const renderClientDropdown = () => (
+  <div className="client-dropdown">
+    <div className="dropdown-header">
+      <Building size={16} />
+      <span>
+        {currentClient ? currentClient.company_name : 'Select Client...'}
+      </span>
+      {clientLoading && <Loader size={14} className="animate-spin" />}
+    </div>
+    
+    <div className="dropdown-content">
+      {/* Default option for no client selection */}
+      <div 
+        className={`dropdown-item ${!currentClient ? 'selected' : ''}`}
+        onClick={() => switchClient(null)}
+      >
+        <span>No Client Selected</span>
+      </div>
+      
+      {/* Real clients from database */}
+      {clients.map((client) => (
+        <div
+          key={client.id}
+          className={`dropdown-item ${currentClient?.id === client.id ? 'selected' : ''}`}
+          onClick={() => switchClient(client)}
+        >
+          <div className="client-info">
+            <span className="company-name">{client.company_name}</span>
+            {client.industry && <span className="industry">({client.industry})</span>}
+          </div>
+          <div className="client-actions">
+            <button 
+              className="client-action-btn" 
+              onClick={(e) => {
+                e.stopPropagation();
+                openEditClientModal(client);
+              }}
+              title="Edit Client"
+            >
+              <Edit size={14} />
+            </button>
+            <button 
+              className="client-action-btn delete" 
+              onClick={(e) => {
+                e.stopPropagation();
+                openDeleteClientModal(client);
+              }}
+              title="Delete Client"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </div>
+      ))}
+      
+      {/* Add new client option */}
+      <div className="dropdown-item add-client" onClick={openAddClientModal}>
+        <Plus size={16} />
+        <span>Add New Client</span>
+      </div>
+    </div>
+  </div>
+);
+
+// NEW: Client statistics display
+const renderClientStats = () => {
+  if (!currentClient) return null;
+  
+  return (
+    <div className="client-stats">
+      <span className="stat-item">
+        <FileText size={12} />
+        {currentClient.content_count || 0} content items
+      </span>
+      {currentClient.industry && (
+        <span className="stat-item">
+          <Building size={12} />
+          {currentClient.industry}
+        </span>
+      )}
+    </div>
+  );
+};
+```
+
+#### Database Error Handling:
+```typescript
+// NEW: Client loading and error states
+const renderClientStatus = () => {
+  if (clientLoading) {
+    return (
+      <div className="client-status loading">
+        <Loader size={16} className="animate-spin" />
+        <span>Loading clients...</span>
+      </div>
+    );
+  }
+  
+  if (clients.length === 0) {
+    return (
+      <div className="client-status empty">
+        <AlertCircle size={16} />
+        <span>No clients found</span>
+        <button onClick={openAddClientModal} className="add-client-btn">
+          Add First Client
+        </button>
+      </div>
+    );
+  }
+  
+  return renderClientDropdown();
+};
 ```
 
 #### Enhanced Client Display Logic:
@@ -1696,6 +2066,79 @@ interface DeleteClientModalProps {
 ## 6. Page Components Implementation
 ### 6.1 ContentCreator.tsx
 Purpose: Universal content creation tool supporting 12 content types
+#### Props Interface (Enhanced):
+```typescript
+interface ContentCreatorProps {
+  currentClient: Client | null;           // NEW: Client context
+  clients: Client[];                      // NEW: All clients
+  refreshClients: () => Promise<void>;    // NEW: Refresh function
+}
+```
+
+#### Client-Aware Content Generation:
+```typescript
+// NEW: Enhanced API call with client context
+const callClaudeWithClientContext = async (conversationHistory: ConversationMessage[]) => {
+  const response = await apiService.generateContent(conversationHistory, {
+    client_id: currentClient?.id,
+    content_type: 'content_creation',
+    title: generateContentTitle(),
+    metadata: {
+      tool: 'content-creator',
+      content_type: selectedContentType,
+      client_company: currentClient?.company_name,
+      client_industry: currentClient?.industry,
+      target_audience: currentClient?.target_audience,
+      preview_mode: previewMode
+    }
+  });
+  return response;
+};
+
+// NEW: Client-aware content title generation
+const generateContentTitle = (): string => {
+  const clientName = currentClient?.company_name || 'Client';
+  const contentTypeLabel = contentTypes.find(ct => ct.value === selectedContentType)?.label || 'Content';
+  return `${clientName} - ${contentTypeLabel}`;
+};
+
+// NEW: Enhanced prompt with client business context
+const enhancePromptWithClientContext = (userPrompt: string): string => {
+  const clientContext = currentClient ? `
+CLIENT BUSINESS CONTEXT:
+- Company: ${currentClient.company_name}
+- Industry: ${currentClient.industry || 'Not specified'}
+- Target Audience: ${currentClient.target_audience || 'Not specified'}
+- Brand Guidelines: ${currentClient.brand_guidelines || 'Not specified'}
+- Website: ${currentClient.website || 'Not specified'}
+
+Please create ${selectedContentType.replace('-', ' ')} content specifically for ${currentClient.company_name} that aligns with their brand and speaks to their target audience.
+` : '';
+
+  return `${userPrompt}${clientContext}
+
+Content Type: ${selectedContentType}
+Create professional, engaging content that reflects the client's brand voice and messaging.`;
+};
+```
+
+#### Client Status Badge Implementation:
+```typescript
+// NEW: Client context display in content creator
+<div className="client-status-badge">
+  {currentClient ? (
+    <div className="client-badge selected">
+      <Building size={14} />
+      <span>{currentClient.company_name}</span>
+    </div>
+  ) : (
+    <div className="client-badge warning">
+      <AlertTriangle size={14} />
+      <span>No Client Selected</span>
+    </div>
+  )}
+</div>
+```
 
 #### Content Types Supported:
 ```typescript
@@ -2055,10 +2498,46 @@ const validateForm = (): boolean => {
 ```
 
 ### 6.3 Dashboard.tsx
-Purpose: Central hub with analytics, navigation, and overview widgets
+Purpose: Central hub with real analytics, client-aware navigation, and database-driven overview widgets
+#### Props Interface (Enhanced):
+```typescript
+interface DashboardProps {
+  navigateToPage: (page: string) => void;
+  currentClient: Client | null;           // NEW: Client context
+  clients: Client[];                      // NEW: All clients
+  refreshClients: () => Promise<void>;    // NEW: Refresh function
+}
+```
+
+#### Real Data Integration:
+```typescript
+const [dashboardData, setDashboardData] = useState<any>(null);
+const [loading, setLoading] = useState(true);
+const [error, setError] = useState<string | null>(null);
+
+// TRANSFORMED: Load real dashboard data from database
+useEffect(() => {
+  const loadDashboardData = async () => {
+    try {
+      setLoading(true);
+      const response = await clientService.getDashboardAnalytics();
+      if (response.success) {
+        setDashboardData(response.data);
+      }
+    } catch (error) {
+      setError('Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  loadDashboardData();
+}, [currentClient]);
+```
+
 #### Quick Actions Implementation:
 ```typescript
-// Navigation structure
+// Navigation structure (unchanged)
 const quickActions = [
   { page: 'marketing-calendar', icon: Calendar, title: 'Marketing Calendar' },
   { page: 'social-calendar', icon: Search, title: 'Social Calendar' },
@@ -2069,19 +2548,50 @@ const quickActions = [
 ];
 ```
 
-#### Stats Cards Implementation:
+#### Stats Cards Implementation (TRANSFORMED):
 ```typescript
-const statsData = [
-  { number: '47', label: 'Content Created', change: '+12% This Week', positive: true },
-  { number: '23', label: 'Active Campaigns', change: '+8.1% This Month', positive: true },
-  { number: '89%', label: 'Content Success Rate', change: '+5.2% This Month', positive: true },
-  { number: '156', label: 'Scheduled Posts', change: '-3.1% This Week', positive: false }
-];
+// REMOVED: const statsData = [hardcoded array];
+// NEW: Dynamic stats from database
+const getStatsData = () => {
+  if (!dashboardData) return [];
+  
+  return [
+    { 
+      number: dashboardData.total_content?.toString() || '0', 
+      label: 'Content Created', 
+      change: dashboardData.content_growth || 'No data',
+      positive: dashboardData.content_growth?.includes('+') || false 
+    },
+    { 
+      number: dashboardData.active_campaigns?.toString() || '0', 
+      label: 'Active Campaigns', 
+      change: dashboardData.campaign_growth || 'No data',
+      positive: dashboardData.campaign_growth?.includes('+') || false 
+    },
+    { 
+      number: dashboardData.success_rate || '0%', 
+      label: 'Content Success Rate', 
+      change: dashboardData.success_growth || 'No data',
+      positive: dashboardData.success_growth?.includes('+') || false 
+    },
+    { 
+      number: dashboardData.scheduled_posts?.toString() || '0', 
+      label: 'Scheduled Posts', 
+      change: dashboardData.post_growth || 'No data',
+      positive: dashboardData.post_growth?.includes('+') || false 
+    }
+  ];
+};
 ```
 
-#### Analytics Chart (SVG Implementation):
+#### Analytics Chart (Real Data Integration):
 ```typescript
-// Custom SVG chart with gradient bars
+// TRANSFORMED: Chart now uses real database content counts
+const getContentTypeCount = (type: string): number => {
+  return dashboardData?.content_by_type?.[type] || 0;
+};
+
+// Custom SVG chart with real data scaling
 <svg width="320" height="160" viewBox="0 0 320 160">
   <defs>
     <linearGradient id="barGradient" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -2089,16 +2599,18 @@ const statsData = [
       <stop offset="100%" stopColor="#ff6b35" stopOpacity="0.6" />
     </linearGradient>
   </defs>
-  {/* 7 bars representing weekly data */}
+  {/* Bars now scale based on actual database content counts */}
 </svg>
 ```
 
-#### Persona Slider Implementation:
+#### Persona Slider Implementation (TRANSFORMED):
 ```typescript
+// REMOVED: const allPersonas = [12 hardcoded items];
+// NEW: Real personas from database
 const [personaStartIndex, setPersonaStartIndex] = useState(0);
+const allPersonas = dashboardData?.recent_personas || [];
 const visiblePersonas = allPersonas.slice(personaStartIndex, personaStartIndex + 3);
 
-// Navigation functions
 const nextPersonas = () => {
   if (personaStartIndex + 3 < allPersonas.length) {
     setPersonaStartIndex(personaStartIndex + 1);
@@ -2114,13 +2626,86 @@ const getDaysInMonth = () => {
     day: number,
     isCurrentMonth: boolean,
     isToday: boolean,
-    hasEvent: boolean
+    hasEvent: boolean  // Now checks real database events
   }));
 };
 ```
 
+- **Key Changes Made:**
+   - Added Props Interface with client context
+   - Added Real Data Integration with database loading
+   - Transformed Stats Cards from hardcoded to dynamic database data
+   - Updated Analytics Chart to use real content counts  
+   - Updated Persona Slider to use database personas instead of hardcoded array
+
 ### 6.4 EmailGenerator.tsx
 Purpose: Email creation with template/wireframe system
+#### Props Interface (Enhanced):
+```typescript
+interface EmailGeneratorProps {
+  openPreviewModal: (data: any) => void;
+  openGuidelinesModal: (type: 'email') => void;
+  currentClient: Client | null;           // NEW: Client context
+  clients: Client[];                      // NEW: All clients  
+  refreshClients: () => Promise<void>;    // NEW: Refresh function
+}
+```
+
+#### Client Context Integration:
+```typescript
+// NEW: Client-aware API calls with content association
+const callClaudeWithClientContext = async (conversationHistory: ConversationMessage[]) => {
+  const response = await apiService.generateContent(conversationHistory, {
+    client_id: currentClient?.id,
+    content_type: 'email',
+    title: generatedTitle,
+    metadata: {
+      platform: 'email',
+      template_used: templateMode ? currentTemplateInfo?.id : undefined,
+      template_mode: templateMode,
+      conversation_length: conversationHistory.length
+    }
+  });
+  return response;
+};
+
+// NEW: Enhanced prompt generation with client context
+const generateClientAwarePrompt = (userPrompt: string): string => {
+  const clientContext = currentClient ? `
+CLIENT CONTEXT:
+- Company: ${currentClient.company_name}
+- Industry: ${currentClient.industry || 'Not specified'}
+- Target Audience: ${currentClient.target_audience || 'Not specified'}
+- Brand Guidelines: ${currentClient.brand_guidelines || 'Not specified'}
+
+Please customize the email content and messaging specifically for ${currentClient.company_name}.
+` : '';
+
+  return `${userPrompt}${clientContext}
+
+Return as JSON with subject, content, and html fields.`;
+};
+```
+
+#### Client Context UI Components:
+```typescript
+// NEW: Client status display in email generator
+<div className="client-context">
+  {currentClient ? (
+    <>
+      <Building size={16} />
+      <span>Generating for: <strong>{currentClient.company_name}</strong></span>
+      {currentClient.industry && <span>({currentClient.industry})</span>}
+    </>
+  ) : (
+    <>
+      <AlertTriangle size={16} />
+      <span>Select a client to save generated content</span>
+    </>
+  )}
+</div>
+```
+
 #### Tab System:
 ```typescript
 const [activeTab, setActiveTab] = useState('create-email');
@@ -2245,6 +2830,80 @@ useEffect(() => {
 
 ### 6.5 LandingPageBuilder.tsx
 Purpose: Multi-platform landing page creation with professional file separation
+#### Props Interface (Enhanced):
+```typescript
+interface LandingPageBuilderProps {
+  openPreviewModal: (data: any) => void;
+  openGuidelinesModal: (type: 'landing-page') => void;
+  currentClient: Client | null;           // NEW: Client context
+  clients: Client[];                      // NEW: All clients
+  refreshClients: () => Promise<void>;    // NEW: Refresh function
+}
+```
+
+#### Client-Aware API Integration:
+```typescript
+// TRANSFORMED: Enhanced API call with client context
+const callClaude = async (conversationHistory: ConversationMessage[]) => {
+  const response = await apiService.generateContent(conversationHistory, {
+    client_id: currentClient?.id,
+    content_type: 'landing_page',
+    title: generateTitle(),
+    metadata: {
+      platform: selectedPlatform,
+      template_used: currentTemplateInfo?.id,
+      template_mode: templateMode,
+      multi_file_mode: isMultiFileMode,
+      tool: 'landing-page-builder',
+      client_company: currentClient?.company_name,
+      client_industry: currentClient?.industry
+    }
+  });
+  return response;
+};
+
+// NEW: Client context in AI prompts
+const enhancePromptWithClientContext = (userPrompt: string): string => {
+  const clientContext = currentClient ? `
+CLIENT CONTEXT:
+- Company: ${currentClient.company_name}
+- Industry: ${currentClient.industry || 'Not specified'}
+- Target Audience: ${currentClient.target_audience || 'Not specified'}
+- Brand Guidelines: ${currentClient.brand_guidelines || 'Not specified'}
+- Website: ${currentClient.website || 'Not specified'}
+` : '';
+
+  return `${userPrompt}
+Platform: ${selectedPlatform}${clientContext}
+
+IMPORTANT LANDING PAGE REQUIREMENTS:
+- Create a complete landing page for ${selectedPlatform} platform
+${currentClient ? `- Customize the content and messaging for ${currentClient.company_name}` : ''}
+- Include responsive design elements
+- Ensure professional appearance and functionality
+`;
+};
+```
+
+#### Client Context UI Integration:
+```typescript
+// NEW: Client status display in landing page builder
+<div className="client-context-display">
+  {currentClient ? (
+    <div className="client-selected">
+      <Building size={16} />
+      <span>Building for: <strong>{currentClient.company_name}</strong></span>
+      {currentClient.industry && <span className="industry">({currentClient.industry})</span>}
+    </div>
+  ) : (
+    <div className="no-client-warning">
+      <AlertTriangle size={16} />
+      <span>Select a client to save generated landing pages</span>
+    </div>
+  )}
+</div>
+```
+
 #### "Dumb Pipeline" Architecture:
 - Let Claude decide single vs multi-file based on complexity
 - Always-visible UI elements (no conditional rendering)
@@ -2289,8 +2948,10 @@ try {
 
 #### ZIP Download System:
 ```typescript
+// ENHANCED: Client-aware ZIP naming
 const downloadZipPackage = async () => {
   const zip = new JSZip();
+  const clientPrefix = currentClient ? `${currentClient.company_name.replace(/[^a-zA-Z0-9]/g, '-')}-` : '';
   
   if (isMultiFileMode && Object.keys(multiFileContent).length > 0) {
     // Multi-file ZIP with proper folder structure
@@ -2306,11 +2967,11 @@ const downloadZipPackage = async () => {
     });
   } else {
     // Single HTML file in ZIP
-    zip.file(`${selectedPlatform}-landing-page.html`, landingPagePreview);
+    zip.file(`${clientPrefix}${selectedPlatform}-landing-page.html`, landingPagePreview);
   }
   
   const blob = await zip.generateAsync({ type: 'blob' });
-  saveAs(blob, `${selectedPlatform}-landing-page-project.zip`);
+  saveAs(blob, `${clientPrefix}${selectedPlatform}-landing-page-project.zip`);
 };
 ```
 
@@ -2399,6 +3060,74 @@ useEffect(() => {
 
 ### 6.6 PersonaBuilder.tsx
 Purpose: AI-powered customer persona creation and management
+#### Props Interface (Enhanced):
+```typescript
+interface PersonaBuilderProps {
+  openEditPersonaModal: (data: any) => void;
+  currentClient: Client | null;           // NEW: Client context
+  clients: Client[];                      // NEW: All clients
+  refreshClients: () => Promise<void>;    // NEW: Refresh function
+}
+```
+
+#### Client-Aware Persona Generation:
+```typescript
+// NEW: Client context integration for persona creation
+const generateClientAwarePersona = async (conversationHistory: ConversationMessage[]) => {
+  const response = await apiService.generateContent(conversationHistory, {
+    client_id: currentClient?.id,
+    content_type: 'persona',
+    title: extractPersonaName(generatedPersona) || 'Generated Persona',
+    metadata: {
+      tool: 'persona-builder',
+      client_company: currentClient?.company_name,
+      client_industry: currentClient?.industry,
+      target_audience: currentClient?.target_audience,
+      session_id: sessionId,
+      token_count: tokenCount
+    }
+  });
+  return response;
+};
+
+// NEW: Enhanced prompt with client business context
+const enhancePromptWithClientContext = (userPrompt: string): string => {
+  const clientContext = currentClient ? `
+CLIENT BUSINESS CONTEXT:
+- Company: ${currentClient.company_name}
+- Industry: ${currentClient.industry || 'Not specified'}
+- Current Target Audience: ${currentClient.target_audience || 'Not specified'}
+- Business Goals: ${currentClient.goals?.join(', ') || 'Not specified'}
+- Brand Guidelines: ${currentClient.brand_guidelines || 'Not specified'}
+
+Please create a customer persona specifically for ${currentClient.company_name} that aligns with their business goals and complements their current target audience.
+` : '';
+
+  return `${userPrompt}${clientContext}
+
+Create a detailed customer persona with demographics, goals, pain points, solutions, characteristics, and buying process information.`;
+};
+```
+
+#### Client Context UI Integration:
+```typescript
+// NEW: Client status display in persona builder
+<div className="client-context-display">
+  {currentClient ? (
+    <div className="client-selected">
+      <Building size={16} />
+      <span>Creating persona for: <strong>{currentClient.company_name}</strong></span>
+      {currentClient.industry && <span className="industry">({currentClient.industry})</span>}
+    </div>
+  ) : (
+    <div className="no-client-warning">
+      <AlertTriangle size={16} />
+      <span>Select a client to save personas</span>
+    </div>
+  )}
+</div>
+```
+
 #### Two-Tab System:
 ```typescript
 const [activeTab, setActiveTab] = useState('new-persona');
@@ -2935,6 +3664,113 @@ const loadUserData = async () => {
 
 ### 6.10 AdsAnalysis.tsx
 Purpose: AI-powered advertising data analysis with file upload support
+#### Props Interface (Enhanced):
+```typescript
+interface AdsAnalysisProps {
+  currentClient: Client | null;           // NEW: Client context
+  clients: Client[];                      // NEW: All clients
+  refreshClients: () => Promise<void>;    // NEW: Refresh function
+}
+```
+
+#### Client-Aware Analysis Integration:
+```typescript
+// NEW: Enhanced file upload with client context
+const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  setFileName(file.name);
+  setMessages(prev => [...prev, {
+    type: 'system',
+    content: `📁 File "${file.name}" uploaded successfully${currentClient ? ` for ${currentClient.company_name}` : ''}`
+  }]);
+  
+  processFile(file);
+};
+
+// TRANSFORMED: Enhanced API call with client context
+const callClaude = async (conversationHistory: ConversationMessage[]) => {
+  const response = await apiService.generateContent(conversationHistory, {
+    client_id: currentClient?.id,
+    content_type: 'ads_analysis',
+    title: generateAnalysisTitle(),
+    metadata: {
+      tool: 'ads-analysis',
+      data_source: fileName,
+      file_size: uploadedData?.length || 0,
+      client_company: currentClient?.company_name,
+      client_industry: currentClient?.industry,
+      analysis_date: new Date().toISOString(),
+      token_count: tokenCount
+    }
+  });
+  return response;
+};
+
+// NEW: Client-aware analysis title generation
+const generateAnalysisTitle = (): string => {
+  const clientName = currentClient?.company_name || 'Client';
+  const dataSource = fileName ? fileName.replace(/\.[^/.]+$/, '') : 'Data';
+  return `${clientName} - ${dataSource} Analysis Report`;
+};
+
+// NEW: Enhanced prompt with client business context
+const enhancePromptWithClientContext = (userPrompt: string): string => {
+  const clientContext = currentClient ? `
+CLIENT BUSINESS CONTEXT:
+- Company: ${currentClient.company_name}
+- Industry: ${currentClient.industry || 'Not specified'}
+- Target Audience: ${currentClient.target_audience || 'Not specified'}
+- Business Goals: ${currentClient.goals?.join(', ') || 'Not specified'}
+- Budget Range: ${currentClient.budget_range || 'Not specified'}
+
+Please analyze this advertising data specifically for ${currentClient.company_name}, considering their industry, target audience, and business goals. Provide actionable insights and recommendations tailored to their specific business context.
+` : '';
+
+  return `${userPrompt}${clientContext}
+
+Data Source: ${fileName || 'Uploaded advertising data'}
+Please provide a comprehensive analysis with actionable recommendations.`;
+};
+```
+
+#### Client Context UI Components:
+```typescript
+// NEW: Client-aware upload area
+<div className="upload-area">
+  <div className="upload-icon">📊</div>
+  <h3>Upload Your Advertising Data</h3>
+  <p>
+    Upload CSV or Excel files with your advertising performance data
+    {currentClient && (
+      <span className="client-context"> for <strong>{currentClient.company_name}</strong></span>
+    )}
+  </p>
+  <input
+    type="file"
+    accept=".csv,.xlsx,.xls"
+    onChange={handleFileUpload}
+    className="file-input"
+  />
+</div>
+
+// NEW: Client status display in analysis section
+<div className="client-context-display">
+  {currentClient ? (
+    <div className="client-selected">
+      <Building size={16} />
+      <span>Analyzing for: <strong>{currentClient.company_name}</strong></span>
+      {currentClient.industry && <span className="industry">({currentClient.industry})</span>}
+    </div>
+  ) : (
+    <div className="no-client-warning">
+      <AlertTriangle size={16} />
+      <span>Select a client to save analysis reports</span>
+    </div>
+  )}
+</div>
+```
 
 #### File Processing System:
 ```typescript
@@ -3043,8 +3879,135 @@ const generateAnalysisMetadata = (fileName: string, uploadedData: string) => ({
 - Copy to Clipboard: Raw HTML for external use
 - File Naming: Intelligent naming based on original filename (ads-analysis-{fileName}.html)
 
+#### Enhanced Export with Client Context:
+```typescript
+// TRANSFORMED: Client-aware filename generation
+const downloadAnalysisCode = () => {
+  const clientPrefix = currentClient ? `${currentClient.company_name.replace(/[^a-zA-Z0-9]/g, '-')}-` : '';
+  const dataSource = fileName ? fileName.replace(/\.[^/.]+$/, '') : 'analysis';
+  const filename = `${clientPrefix}${dataSource}-report.html`;
+  
+  const blob = new Blob([analysisPreview], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+// NEW: Automatic analysis saving to client
+const saveAnalysisToClient = async (analysisContent: string) => {
+  if (!currentClient || !analysisContent) return;
+
+  try {
+    await clientService.saveContentToClient(currentClient.id, {
+      content_type: 'ads_analysis',
+      title: generateAnalysisTitle(),
+      content: analysisContent,
+      metadata: {
+        tool: 'ads-analysis',
+        data_source: fileName,
+        file_size: uploadedData?.length || 0,
+        analysis_date: new Date().toISOString(),
+        client_company: currentClient.company_name,
+        client_industry: currentClient.industry
+      }
+    });
+  } catch (error) {
+    console.error('Failed to save analysis to client:', error);
+  }
+};
+```
+
 ### 6.11 EmailCalendar.tsx & MarketingCalendar.tsx
-Purpose: Campaign planning calendars with AI integration
+Purpose: Client-aware campaign planning calendars with database integration
+#### Enhanced Props Interface (All Calendar Tools):
+```typescript
+interface CalendarProps {
+  openEditModal: (data: any) => void;
+  currentClient: Client | null;           // NEW: Client context
+  clients: Client[];                      // NEW: All clients
+  refreshClients: () => Promise<void>;    // NEW: Refresh function
+}
+```
+
+#### Client-Aware Calendar Generation:
+```typescript
+// TRANSFORMED: MarketingCalendar API integration
+const callClaude = async (conversationHistory: ConversationMessage[]) => {
+  const response = await apiService.generateContent(conversationHistory, {
+    client_id: currentClient?.id,
+    content_type: 'marketing_calendar',
+    title: generateCalendarTitle(),
+    metadata: {
+      content_types: selectedContentTypes,
+      platforms: selectedPlatforms,
+      frequencies: selectedFrequencies,
+      tool: 'marketing-calendar',
+      client_company: currentClient?.company_name,
+      client_industry: currentClient?.industry,
+      target_audience: currentClient?.target_audience
+    }
+  });
+  return response;
+};
+
+// NEW: Calendar title generation with client context
+const generateCalendarTitle = (): string => {
+  const clientName = currentClient?.company_name || 'Client';
+  const contentTypes = selectedContentTypes.length > 0 ? selectedContentTypes.join(', ') : 'Marketing';
+  return `${clientName} - ${contentTypes} Calendar`;
+};
+
+// NEW: Automatic content saving to client
+const saveCalendarToClient = async (calendarData: any[]) => {
+  if (!currentClient || calendarData.length === 0) return;
+
+  try {
+    await clientService.saveContentToClient(currentClient.id, {
+      content_type: 'marketing_calendar',
+      title: generateCalendarTitle(),
+      content: JSON.stringify({
+        calendar: calendarData,
+        generatedAt: new Date().toISOString(),
+        totalEvents: calendarData.length,
+        contentTypes: selectedContentTypes,
+        platforms: selectedPlatforms,
+        frequencies: selectedFrequencies
+      }),
+      metadata: {
+        tool: 'marketing-calendar',
+        client_company: currentClient.company_name,
+        client_industry: currentClient.industry,
+        target_audience: currentClient.target_audience
+      }
+    });
+  } catch (error) {
+    console.error('Failed to save calendar to client:', error);
+  }
+};
+```
+
+#### Client Context UI Components (All Calendar Tools):
+```typescript
+// NEW: Client status display in all calendar tools
+<div className="client-context">
+  {currentClient ? (
+    <>
+      <Building size={16} />
+      <span>Planning for: <strong>{currentClient.company_name}</strong></span>
+      {currentClient.industry && <span>({currentClient.industry})</span>}
+    </>
+  ) : (
+    <>
+      <AlertTriangle size={16} />
+      <span>Select a client to save calendar content</span>
+    </>
+  )}
+</div>
+```
+
 #### Shared Calendar Implementation Pattern:
 ```typescript
 // Month navigation
@@ -3145,6 +4108,27 @@ const getDaysInMonth = () => {
   onChange={setSelectedContentTypes}
   placeholder="Select content types..."
 />
+```
+
+#### Enhanced AI Prompt Generation (Client-Aware):
+```typescript
+// TRANSFORMED: All calendar tools now include client context in prompts
+const generateClientAwarePrompt = (basePrompt: string, calendarType: string): string => {
+  const clientContext = currentClient ? `
+CLIENT BUSINESS CONTEXT:
+- Company: ${currentClient.company_name}
+- Industry: ${currentClient.industry || 'Not specified'}
+- Target Audience: ${currentClient.target_audience || 'Not specified'}
+- Brand Guidelines: ${currentClient.brand_guidelines || 'Not specified'}
+- Goals: ${currentClient.goals?.join(', ') || 'Not specified'}
+
+Please create ${calendarType} calendar content specifically tailored for ${currentClient.company_name}'s business needs and target audience.
+` : '';
+
+  return `${basePrompt}${clientContext}
+
+Return as JSON with calendar array containing events with date, title, content, contentType, platform, and status fields.`;
+};
 ```
 
 #### Day Click Handler for Modal Integration:
