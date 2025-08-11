@@ -31,23 +31,29 @@
     │       004_create_email_verifications_table.sql
     │       005_create_password_resets_table.sql
     │       006_create_saved_assets_table.sql
+    │       007_create_clients_table.sql
+    │       008_create_client_content_table.sql
     │
     ├───models
     │       EmailVerification.ts
     │       SavedAsset.ts
     │       Token.ts
     │       User.ts
+    │       Client.ts
+    │       ClientContent.ts
     │
     ├───routes
     │       auth.ts
     │       generate.ts
     │       savedAssets.ts
     │       validate.ts
+    │       clients.ts
     │
     ├───services
     │       aiService.ts
     │       emailService.ts
     │       tokenService.ts
+    │       clientService.ts
     │
     └───types
             index.ts</pre>
@@ -60,7 +66,10 @@ The MarAI backend follows a "Claude-first" architecture:
 - Conversation Aware: Full conversation history support with intelligent token management
 - Enhanced Logging: Comprehensive request/response monitoring with user context
 - Backward Compatible: Legacy single-prompt requests automatically converted
-
+- Client Management: Complete business client lifecycle with content association
+- Content Analytics: Real metrics tracking with database-backed insights  
+- Business Intelligence: Advanced analytics for client engagement patterns
+  
 ### Key Architectural Decisions
 - TypeScript First: Full type safety across all components
 - Express.js Framework: Battle-tested, lightweight web framework
@@ -549,6 +558,7 @@ import generateRoutes from './routes/generate';
 import validateRoutes from './routes/validate';
 import authRoutes from './routes/auth';
 import savedAssetsRoutes from './routes/savedAssets';
+import clientRoutes from './routes/clients';
 
 // Load environment variables
 dotenv.config();
@@ -592,11 +602,13 @@ app.get('/health', async (req, res) => {
       features: {
   userAuthentication: true,
   savedAssets: true,
+  clientManagement: true,
+  contentAssociation: true,
   conversationSupport: true,
   rateLimiting: true,
   cors: true,
   security: true
-},
+}
 endpoints: {
   auth: '/api/auth/*',
   savedAssets: '/api/saved-assets/*',
@@ -618,6 +630,7 @@ endpoints: {
 // API routes
 app.use('/api/auth', authRoutes);           // User authentication
 app.use('/api/saved-assets', savedAssetsRoutes); // Saved assets management
+app.use('/api/clients', clientRoutes);           // Client management system
 app.use('/api/generate', generateRoutes);   // Claude-powered content generation
 app.use('/api/validate', validateRoutes);   // Claude API key validation
 
@@ -649,7 +662,16 @@ app.use('*', (req, res) => {
   auth: 'POST /api/auth/{signup,login,logout,me}',
   savedAssets: 'GET/POST /api/saved-assets',
   generate: 'POST /api/generate', 
-  validate: 'POST /api/validate/anthropic'
+  validate: 'POST /api/validate/anthropic',
+  // NEW: Client Management endpoints
+  clients: 'GET/POST /api/clients',
+  clientDetails: 'GET/PUT/DELETE /api/clients/:id',
+  clientContent: 'GET /api/clients/:id/content',
+  clientStats: 'GET /api/clients/:id/stats',
+  clientSearch: 'GET /api/clients/search/:term',
+  clientAnalytics: 'GET /api/clients/analytics/overview',
+  clientBulk: 'POST /api/clients/bulk/archive',
+  clientExport: 'GET /api/clients/:id/export'
 }
   });
 });
@@ -1126,6 +1148,230 @@ export interface SavedAssetStats {
   spaceUsed: number;
   limit: number;
 }
+
+// Main client interface (matches database schema)
+export interface Client {
+  id: number;
+  user_id: number;
+  company_name: string;
+  industry?: string;
+  website?: string;
+  contact_name?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  contact_role?: string;
+  target_audience?: string;
+  budget_range?: string;
+  goals?: string[];
+  description?: string;
+  brand_colors?: Record<string, any>;
+  brand_guidelines?: string;
+  notes?: string;
+  is_active: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+// Client creation and update interfaces
+export interface CreateClientData {
+  company_name: string;
+  industry?: string;
+  website?: string;
+  contact_name?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  contact_role?: string;
+  target_audience?: string;
+  budget_range?: string;
+  goals?: string[];
+  description?: string;
+  brand_colors?: Record<string, any>;
+  brand_guidelines?: string;
+  notes?: string;
+}
+
+export interface UpdateClientData {
+  company_name?: string;
+  industry?: string;
+  website?: string;
+  contact_name?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  contact_role?: string;
+  target_audience?: string;
+  budget_range?: string;
+  goals?: string[];
+  description?: string;
+  brand_colors?: Record<string, any>;
+  brand_guidelines?: string;
+  notes?: string;
+}
+
+export interface ClientSummary {
+  id: number;
+  company_name: string;
+  industry?: string;
+  contact_name?: string;
+  content_count: number;
+  last_activity?: Date;
+  created_at: Date;
+}
+
+export interface ClientStats {
+  content_count: number;
+  email_count: number;
+  landing_page_count: number;
+  persona_count: number;
+  calendar_count: number;
+  last_activity?: Date;
+}
+
+// Valid budget ranges
+export const VALID_BUDGET_RANGES = [
+  '0-10k', '10k-50k', '50k-100k', '100k+', 'custom'
+] as const;
+
+export type BudgetRange = typeof VALID_BUDGET_RANGES[number];
+// Valid content types (24 types)
+export const VALID_CONTENT_TYPES = [
+  'email', 'newsletter', 'promotional', 'welcome', 'announcement', 'ecommerce_email',
+  'landing_page', 'saas_landing', 'ecommerce_landing', 'agency_landing', 'portfolio_landing',
+  'persona', 'buyer_persona', 'customer_persona',
+  'social_calendar', 'marketing_calendar', 'email_calendar',
+  'content_creator', 'blog_post', 'social_post', 'case_study', 'whitepaper', 'press_release',
+  'ads_analysis', 'campaign_analysis', 'prompt_library', 'custom_prompt', 'other'
+] as const;
+
+export type ContentType = typeof VALID_CONTENT_TYPES[number];
+
+export interface ClientContent {
+  id: number;
+  client_id: number;
+  content_type: ContentType;
+  title: string;
+  content: string;
+  metadata: Record<string, any>;
+  tags?: string[];
+  status: 'active' | 'archived' | 'draft' | 'deleted';
+  version: number;
+  parent_content_id?: number;
+  ai_provider: string;
+  ai_model?: string;
+  token_count?: number;
+  generation_time_ms?: number;
+  conversation_history?: Record<string, any>;
+  template_used?: string;
+  platform?: string;
+  is_favorite: boolean;
+  last_accessed: Date;
+  created_at: Date;
+  updated_at: Date;
+}
+
+// Client content creation and update interfaces
+export interface CreateClientContentData {
+  client_id: number;
+  content_type: ContentType;
+  title: string;
+  content: string;
+  metadata?: Record<string, any>;
+  tags?: string[];
+  ai_provider?: string;
+  ai_model?: string;
+  token_count?: number;
+  generation_time_ms?: number;
+  conversation_history?: Record<string, any>;
+  template_used?: string;
+  platform?: string;
+}
+
+export interface UpdateClientContentData {
+  title?: string;
+  content?: string;
+  metadata?: Record<string, any>;
+  tags?: string[];
+  status?: 'active' | 'archived' | 'draft' | 'deleted';
+  template_used?: string;
+  platform?: string;
+}
+
+// Dashboard data interface for real metrics
+export interface DashboardData {
+  client_overview: {
+    total_clients: number;
+    active_clients: number;
+    clients_with_content: number;
+    new_clients_this_month: number;
+  };
+  content_overview: {
+    total_content: number;
+    content_this_week: number;
+    content_this_month: number;
+    content_by_type: Record<ContentType, number>;
+    recent_content: Array<{
+      id: number;
+      title: string;
+      content_type: ContentType;
+      client_name: string;
+      created_at: Date;
+    }>;
+  };
+  top_clients: Array<{
+    client_id: number;
+    company_name: string;
+    content_count: number;
+    last_activity: Date;
+  }>;
+  content_activity: Array<{
+    date: string;
+    content_count: number;
+    content_types: ContentType[];
+  }>;
+}
+
+// Content creation context for AI integration
+export interface ContentCreationContext {
+  client_id: number;
+  user_id: number;
+  content_type: ContentType;
+  ai_metadata: {
+    provider: string;
+    model?: string;
+    token_count?: number;
+    generation_time_ms?: number;
+    conversation_history?: any;
+  };
+  template_context?: {
+    template_used?: string;
+    platform?: string;
+    category?: string;
+  };
+}
+
+// Enhanced request interface with client context - EXTENDS existing GenerateRequest
+export interface EnhancedGenerateRequest extends GenerateRequest {
+  // Existing fields inherited: prompt
+  conversationHistory?: ConversationMessage[];
+  
+  // NEW: Client context fields
+  client_id?: number;
+  content_type?: ContentType;
+  title?: string;
+  metadata?: Record<string, any>;
+  
+  // NEW: Platform and template context
+  platform?: PlatformType;
+  template_used?: string;
+  
+  // NEW: Generation options
+  options?: {
+    maxTokens?: number;
+    temperature?: number;
+    enhancePersonas?: boolean;
+    enhanceEmails?: boolean;
+    enhanceLandingPages?: boolean;
+  };
+}
 ```
 
 ### Type System Analysis
@@ -1593,6 +1839,440 @@ export type { ConversationMessage };
 - Uses Claude 4 Sonnet model
 - Configurable temperature and tokens
 - Proper message format conversion
+
+## 🏢 Client Business Logic Service
+### services/clientService.ts - Business Logic Orchestration
+```typescript
+import { clientModel } from '../models/Client';
+import { clientContentModel } from '../models/ClientContent';
+import { Client, CreateClientData, UpdateClientData, ClientSummary, DashboardData, CreateClientContentData, ContentType } from '../types';
+
+class ClientService {
+  /**
+   * Create client with enhanced validation and business rules
+   */
+  async createClientWithValidation(userId: number, clientData: CreateClientData): Promise<Client> {
+    // Business rule: Check client limit (configurable per subscription tier)
+    const existingClients = await clientModel.findByUserId(userId);
+    const clientLimit = parseInt(process.env.MAX_CLIENTS_PER_USER || '50');
+    
+    if (existingClients.length >= clientLimit) {
+      throw new Error(`Client limit reached. Maximum ${clientLimit} clients allowed per user.`);
+    }
+    
+    // Enhanced validation for business context
+    if (clientData.industry) {
+      const validIndustries = [
+        'Technology', 'Healthcare', 'Finance', 'Retail', 'Manufacturing', 
+        'Education', 'Real Estate', 'Marketing', 'Consulting', 'E-commerce', 
+        'SaaS', 'Non-profit', 'Government', 'Entertainment', 'Other'
+      ];
+      
+      if (!validIndustries.includes(clientData.industry)) {
+        console.warn(`Non-standard industry provided: ${clientData.industry}`);
+      }
+    }
+    
+    return await clientModel.createClient(userId, clientData);
+  }
+
+  /**
+   * Get client with comprehensive metrics and content breakdown
+   */
+  async getClientWithMetrics(clientId: number, userId: number): Promise<{
+    client: Client;
+    stats: any;
+    recentContent: any[];
+    contentBreakdown: Record<ContentType, number>;
+  } | null> {
+    const client = await clientModel.findById(clientId, userId);
+    if (!client) return null;
+    
+    const [stats, contentStats] = await Promise.all([
+      clientModel.getClientStats(clientId, userId),
+      clientContentModel.getClientContentStats(clientId, userId)
+    ]);
+    
+    return {
+      client,
+      stats,
+      recentContent: contentStats.recent_content,
+      contentBreakdown: contentStats.content_by_type
+    };
+  }
+
+  /**
+   * Get comprehensive dashboard data with real metrics
+   */
+  async getDashboardData(userId: number): Promise<DashboardData> {
+    // Parallel data fetching for performance
+    const [
+      clientSummaries,
+      userClients,
+      recentContentQuery,
+      contentStatsQuery,
+      activityQuery
+    ] = await Promise.all([
+      clientModel.getClientSummaries(userId),
+      clientModel.findByUserId(userId),
+      this.getRecentContentAcrossClients(userId, 10),
+      this.getUserContentStatistics(userId),
+      this.getContentActivity(userId, 30) // Last 30 days
+    ]);
+    
+    // Calculate client overview metrics
+    const activeClients = userClients.filter(c => c.is_active);
+    const clientsWithContent = clientSummaries.filter(c => c.content_count > 0);
+    const newClientsThisMonth = userClients.filter(c => 
+      new Date(c.created_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    );
+    
+    // Content overview metrics
+    const contentThisWeek = await this.getContentCountSince(userId, 7);
+    const contentThisMonth = await this.getContentCountSince(userId, 30);
+    
+    // Top performing clients
+    const topClients = clientSummaries
+      .sort((a, b) => b.content_count - a.content_count)
+      .slice(0, 5)
+      .map(client => ({
+        client_id: client.id,
+        company_name: client.company_name,
+        content_count: client.content_count,
+        last_activity: client.last_activity || client.created_at
+      }));
+    
+    return {
+      client_overview: {
+        total_clients: userClients.length,
+        active_clients: activeClients.length,
+        clients_with_content: clientsWithContent.length,
+        new_clients_this_month: newClientsThisMonth.length
+      },
+      content_overview: {
+        total_content: contentStatsQuery.total_content,
+        content_this_week: contentThisWeek,
+        content_this_month: contentThisMonth,
+        content_by_type: contentStatsQuery.content_by_type,
+        recent_content: recentContentQuery
+      },
+      top_clients: topClients,
+      content_activity: activityQuery
+    };
+  }
+
+  /**
+   * Store AI-generated content with proper context and metadata
+   */
+  async storeGeneratedContent(
+    userId: number,
+    contentData: CreateClientContentData
+  ): Promise<any> {
+    // Validate client ownership before storing
+    const client = await clientModel.findById(contentData.client_id, userId);
+    if (!client) {
+      throw new Error('Client not found or access denied');
+    }
+    
+    // Enhance metadata with generation context
+    const enhancedMetadata = {
+      ...contentData.metadata,
+      generation_timestamp: new Date().toISOString(),
+      client_context: {
+        company_name: client.company_name,
+        industry: client.industry,
+        target_audience: client.target_audience
+      },
+      content_analysis: {
+        estimated_reading_time: this.estimateReadingTime(contentData.content),
+        word_count: contentData.content.split(/\s+/).length,
+        character_count: contentData.content.length
+      }
+    };
+    
+    return await clientContentModel.createContent(userId, {
+      ...contentData,
+      metadata: enhancedMetadata
+    });
+  }
+
+  /**
+   * Get organized client content with smart filtering
+   */
+  async getOrganizedClientContent(
+    clientId: number, 
+    userId: number,
+    filters: {
+      content_type?: ContentType;
+      timeframe?: 'week' | 'month' | 'quarter' | 'all';
+      status?: string;
+      favorites_only?: boolean;
+    } = {}
+  ): Promise<{
+    content: any[];
+    summary: any;
+    recommendations: string[];
+  }> {
+    const { content } = await clientContentModel.findByClientId(clientId, userId, {
+      content_type: filters.content_type,
+      status: filters.status || 'active',
+      favorites_only: filters.favorites_only
+    });
+    
+    // Filter by timeframe if specified
+    let filteredContent = content;
+    if (filters.timeframe && filters.timeframe !== 'all') {
+      const daysBack = {
+        week: 7,
+        month: 30,
+        quarter: 90
+      }[filters.timeframe];
+      
+      const cutoffDate = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000);
+      filteredContent = content.filter(c => new Date(c.created_at) > cutoffDate);
+    }
+    
+    // Generate content recommendations
+    const recommendations = await this.generateContentRecommendations(clientId, userId, content);
+    
+    // Create content summary
+    const summary = {
+      total_items: filteredContent.length,
+      content_types: [...new Set(filteredContent.map(c => c.content_type))],
+      favorites_count: filteredContent.filter(c => c.is_favorite).length,
+      most_recent: filteredContent[0]?.created_at,
+      most_used_type: this.getMostUsedContentType(filteredContent)
+    };
+    
+    return {
+      content: filteredContent,
+      summary,
+      recommendations
+    };
+  }
+
+  /**
+   * Advanced client search with context
+   */
+  async searchClientsWithContext(
+    userId: number, 
+    searchTerm: string, 
+    options: {
+      include_content?: boolean;
+      industry_filter?: string;
+      limit?: number;
+    } = {}
+  ): Promise<any[]> {
+    const clients = await clientModel.searchClients(userId, searchTerm, options.limit);
+    
+    if (!options.include_content) {
+      return clients;
+    }
+    
+    // Enhance with content context
+    const clientsWithContent = await Promise.all(
+      clients.map(async (client) => {
+        const stats = await clientModel.getClientStats(client.id, userId);
+        return {
+          ...client,
+          content_stats: stats
+        };
+      })
+    );
+    
+    return clientsWithContent;
+  }
+
+  /**
+   * Bulk archive clients with detailed results
+   */
+  async bulkArchiveClients(clientIds: number[], userId: number): Promise<{
+    successful: number[];
+    failed: Array<{ id: number; reason: string }>;
+    summary: { archived: number; failed: number };
+  }> {
+    const results = {
+      successful: [] as number[],
+      failed: [] as Array<{ id: number; reason: string }>,
+      summary: { archived: 0, failed: 0 }
+    };
+    
+    for (const clientId of clientIds) {
+      try {
+        const success = await clientModel.deleteClient(clientId, userId);
+        if (success) {
+          results.successful.push(clientId);
+          results.summary.archived++;
+        } else {
+          results.failed.push({ id: clientId, reason: 'Client not found or access denied' });
+          results.summary.failed++;
+        }
+      } catch (error: any) {
+        results.failed.push({ id: clientId, reason: error.message });
+        results.summary.failed++;
+      }
+    }
+    
+    return results;
+  }
+
+  /**
+   * Export complete client data for backup/migration
+   */
+  async exportClientData(clientId: number, userId: number): Promise<{
+    client: Client;
+    content: any[];
+    metadata: any;
+  } | null> {
+    const client = await clientModel.findById(clientId, userId);
+    if (!client) return null;
+    
+    const { content } = await clientContentModel.findByClientId(clientId, userId, { limit: 1000 });
+    
+    const exportMetadata = {
+      export_date: new Date().toISOString(),
+      total_content_items: content.length,
+      content_types: [...new Set(content.map(c => c.content_type))],
+      date_range: {
+        first_content: content[content.length - 1]?.created_at,
+        latest_content: content[0]?.created_at
+      }
+    };
+    
+    return {
+      client,
+      content,
+      metadata: exportMetadata
+    };
+  }
+
+  // Private helper methods
+  private async getRecentContentAcrossClients(userId: number, limit: number): Promise<any[]> {
+    const query = `
+      SELECT cc.id, cc.title, cc.content_type, cc.created_at, c.company_name as client_name
+      FROM client_content cc
+      JOIN clients c ON cc.client_id = c.id
+      WHERE c.user_id = $1 AND cc.status = 'active'
+      ORDER BY cc.created_at DESC
+      LIMIT $2
+    `;
+    
+    const { db } = await import('../config/database');
+    const result = await db.query(query, [userId, limit]);
+    return result.rows;
+  }
+
+  private async getUserContentStatistics(userId: number): Promise<any> {
+    const query = `
+      SELECT 
+        COUNT(*) as total_content,
+        json_object_agg(content_type, type_count) as content_by_type
+      FROM (
+        SELECT 
+          cc.content_type,
+          COUNT(*) as type_count
+        FROM client_content cc
+        JOIN clients c ON cc.client_id = c.id
+        WHERE c.user_id = $1 AND cc.status = 'active'
+        GROUP BY cc.content_type
+      ) stats
+    `;
+    
+    const { db } = await import('../config/database');
+    const result = await db.query(query, [userId]);
+    return {
+      total_content: parseInt(result.rows[0]?.total_content || '0'),
+      content_by_type: result.rows[0]?.content_by_type || {}
+    };
+  }
+
+  private async getContentActivity(userId: number, days: number): Promise<any[]> {
+    const query = `
+      SELECT 
+        DATE(cc.created_at) as date,
+        COUNT(*) as content_count,
+        array_agg(DISTINCT cc.content_type) as content_types
+      FROM client_content cc
+      JOIN clients c ON cc.client_id = c.id
+      WHERE c.user_id = $1 
+      AND cc.created_at > NOW() - INTERVAL '${days} days'
+      AND cc.status = 'active'
+      GROUP BY DATE(cc.created_at)
+      ORDER BY date DESC
+    `;
+    
+    const { db } = await import('../config/database');
+    const result = await db.query(query, [userId]);
+    return result.rows;
+  }
+
+  private async getContentCountSince(userId: number, days: number): Promise<number> {
+    const query = `
+      SELECT COUNT(*) as count
+      FROM client_content cc
+      JOIN clients c ON cc.client_id = c.id
+      WHERE c.user_id = $1 
+      AND cc.created_at > NOW() - INTERVAL '${days} days'
+      AND cc.status = 'active'
+    `;
+    
+    const { db } = await import('../config/database');
+    const result = await db.query(query, [userId]);
+    return parseInt(result.rows[0]?.count || '0');
+  }
+
+  private estimateReadingTime(content: string): number {
+    const wordsPerMinute = 200;
+    const wordCount = content.split(/\s+/).length;
+    return Math.ceil(wordCount / wordsPerMinute);
+  }
+
+  private getMostUsedContentType(content: any[]): string | null {
+    if (content.length === 0) return null;
+    
+    const typeCounts = content.reduce((acc, item) => {
+      acc[item.content_type] = (acc[item.content_type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    
+    return Object.entries(typeCounts)
+      .sort(([,a], [,b]) => b - a)[0]?.[0] || null;
+  }
+
+  private async generateContentRecommendations(clientId: number, userId: number, existingContent: any[]): Promise<string[]> {
+    const recommendations: string[] = [];
+    
+    // Analyze content gaps
+    const contentTypes = existingContent.map(c => c.content_type);
+    const hasEmails = contentTypes.some(t => t.includes('email'));
+    const hasLandingPages = contentTypes.some(t => t.includes('landing'));
+    const hasPersonas = contentTypes.some(t => t.includes('persona'));
+    
+    if (!hasPersonas) {
+      recommendations.push('Consider creating buyer personas to better understand your target audience');
+    }
+    if (!hasEmails) {
+      recommendations.push('Email campaigns can significantly boost client engagement');
+    }
+    if (!hasLandingPages) {
+      recommendations.push('Landing pages can improve conversion rates for your campaigns');
+    }
+    
+    // Check content freshness
+    const recentContent = existingContent.filter(c => 
+      new Date(c.created_at) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    );
+    
+    if (recentContent.length === 0 && existingContent.length > 0) {
+      recommendations.push('Consider updating your content - it\'s been a week since your last creation');
+    }
+    
+    return recommendations;
+  }
+}
+
+export const clientService = new ClientService();
+```
 
 ## 🗄️ Database Configuration
 ### config/database.ts - PostgreSQL Integration
@@ -2135,6 +2815,458 @@ export default router;
 - Multi-device Support: Individual token management per login
 - Comprehensive Logging: Authentication attempt tracking
 
+## 🏢 Client Management Routes
+### routes/clients.ts - RESTful Client API Endpoints
+```typescript
+import { Router } from 'express';
+import { clientService } from '../services/clientService';
+import { clientModel } from '../models/Client';
+import { clientContentModel } from '../models/ClientContent';
+import { authenticateUser } from '../middleware/authMiddleware';
+import { ApiResponse, ContentType, VALID_CONTENT_TYPES } from '../types';
+
+const router = Router();
+
+// All routes require authentication
+router.use(authenticateUser);
+
+/**
+ * GET / - List user's clients with optional statistics
+ */
+router.get('/', async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const includeStats = req.query.include_stats === 'true';
+    
+    if (includeStats) {
+      const clientSummaries = await clientModel.getClientSummaries(userId);
+      res.json({
+        success: true,
+        data: {
+          clients: clientSummaries,
+          total_count: clientSummaries.length
+        }
+      } as ApiResponse);
+    } else {
+      const clients = await clientModel.findByUserId(userId);
+      res.json({
+        success: true,
+        data: {
+          clients,
+          total_count: clients.length
+        }
+      } as ApiResponse);
+    }
+    
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+/**
+ * POST / - Create new client
+ */
+router.post('/', async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const clientData = req.body;
+    
+    // Validate required fields
+    if (!clientData.company_name || clientData.company_name.trim().length < 2) {
+      return res.status(400).json({
+        success: false,
+        error: 'Company name is required and must be at least 2 characters'
+      } as ApiResponse);
+    }
+    
+    const newClient = await clientService.createClientWithValidation(userId, clientData);
+    
+    res.status(201).json({
+      success: true,
+      data: {
+        client: newClient
+      },
+      message: 'Client created successfully'
+    } as ApiResponse);
+    
+  } catch (error: any) {
+    const status = error.message.includes('already exists') ? 409 : 
+                   error.message.includes('limit') ? 429 : 400;
+    
+    res.status(status).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+/**
+ * GET /:id - Get specific client with comprehensive metrics
+ */
+router.get('/:id', async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const clientId = parseInt(req.params.id);
+    
+    if (isNaN(clientId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid client ID'
+      } as ApiResponse);
+    }
+    
+    const clientWithMetrics = await clientService.getClientWithMetrics(clientId, userId);
+    
+    if (!clientWithMetrics) {
+      return res.status(404).json({
+        success: false,
+        error: 'Client not found'
+      } as ApiResponse);
+    }
+    
+    res.json({
+      success: true,
+      data: clientWithMetrics
+    } as ApiResponse);
+    
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+/**
+ * PUT /:id - Update client information
+ */
+router.put('/:id', async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const clientId = parseInt(req.params.id);
+    const updateData = req.body;
+    
+    if (isNaN(clientId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid client ID'
+      } as ApiResponse);
+    }
+    
+    const updatedClient = await clientModel.updateClient(clientId, userId, updateData);
+    
+    if (!updatedClient) {
+      return res.status(404).json({
+        success: false,
+        error: 'Client not found'
+      } as ApiResponse);
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        client: updatedClient
+      },
+      message: 'Client updated successfully'
+    } as ApiResponse);
+    
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+/**
+ * DELETE /:id - Soft delete client
+ */
+router.delete('/:id', async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const clientId = parseInt(req.params.id);
+    
+    if (isNaN(clientId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid client ID'
+      } as ApiResponse);
+    }
+    
+    const deleted = await clientModel.deleteClient(clientId, userId);
+    
+    if (!deleted) {
+      return res.status(404).json({
+        success: false,
+        error: 'Client not found'
+      } as ApiResponse);
+    }
+    
+    res.json({
+      success: true,
+      message: 'Client archived successfully'
+    } as ApiResponse);
+    
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+/**
+ * GET /:id/content - Get client's content with filtering and pagination
+ */
+router.get('/:id/content', async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const clientId = parseInt(req.params.id);
+    const { 
+      content_type, 
+      status = 'active', 
+      limit = 20, 
+      offset = 0, 
+      favorites_only = false,
+      timeframe = 'all'
+    } = req.query;
+    
+    if (isNaN(clientId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid client ID'
+      } as ApiResponse);
+    }
+    
+    // Validate content_type if provided
+    if (content_type && !VALID_CONTENT_TYPES.includes(content_type as ContentType)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid content type. Must be one of: ${VALID_CONTENT_TYPES.join(', ')}`
+      } as ApiResponse);
+    }
+    
+    const organizedContent = await clientService.getOrganizedClientContent(
+      clientId, 
+      userId, 
+      {
+        content_type: content_type as ContentType,
+        status,
+        favorites_only: favorites_only === 'true',
+        timeframe: timeframe as any
+      }
+    );
+    
+    res.json({
+      success: true,
+      data: organizedContent
+    } as ApiResponse);
+    
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+/**
+ * GET /:id/stats - Get client statistics for dashboard
+ */
+router.get('/:id/stats', async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const clientId = parseInt(req.params.id);
+    
+    if (isNaN(clientId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid client ID'
+      } as ApiResponse);
+    }
+    
+    const [clientStats, contentStats] = await Promise.all([
+      clientModel.getClientStats(clientId, userId),
+      clientContentModel.getClientContentStats(clientId, userId)
+    ]);
+    
+    if (!clientStats) {
+      return res.status(404).json({
+        success: false,
+        error: 'Client not found'
+      } as ApiResponse);
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        client_stats: clientStats,
+        content_stats: contentStats
+      }
+    } as ApiResponse);
+    
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+/**
+ * GET /search/:term - Search clients by company name
+ */
+router.get('/search/:term', async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const searchTerm = req.params.term;
+    const { include_content = false, limit = 10 } = req.query;
+    
+    if (!searchTerm || searchTerm.trim().length < 2) {
+      return res.status(400).json({
+        success: false,
+        error: 'Search term must be at least 2 characters'
+      } as ApiResponse);
+    }
+    
+    const clients = await clientService.searchClientsWithContext(
+      userId, 
+      searchTerm.trim(),
+      {
+        include_content: include_content === 'true',
+        limit: parseInt(limit as string)
+      }
+    );
+    
+    res.json({
+      success: true,
+      data: {
+        clients,
+        search_term: searchTerm,
+        total_results: clients.length
+      }
+    } as ApiResponse);
+    
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+/**
+ * GET /analytics/overview - Complete dashboard analytics
+ */
+router.get('/analytics/overview', async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    
+    const dashboardData = await clientService.getDashboardData(userId);
+    
+    res.json({
+      success: true,
+      data: dashboardData
+    } as ApiResponse);
+    
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+/**
+ * POST /bulk/archive - Bulk archive multiple clients
+ */
+router.post('/bulk/archive', async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const { client_ids } = req.body;
+    
+    if (!Array.isArray(client_ids) || client_ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'client_ids must be a non-empty array'
+      } as ApiResponse);
+    }
+    
+    // Validate all IDs are numbers
+    const invalidIds = client_ids.filter(id => isNaN(parseInt(id)));
+    if (invalidIds.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid client IDs: ${invalidIds.join(', ')}`
+      } as ApiResponse);
+    }
+    
+    const results = await clientService.bulkArchiveClients(
+      client_ids.map(id => parseInt(id)), 
+      userId
+    );
+    
+    res.json({
+      success: true,
+      data: results,
+      message: `Archived ${results.summary.archived} clients, ${results.summary.failed} failed`
+    } as ApiResponse);
+    
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+/**
+ * GET /:id/export - Export complete client data
+ */
+router.get('/:id/export', async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const clientId = parseInt(req.params.id);
+    
+    if (isNaN(clientId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid client ID'
+      } as ApiResponse);
+    }
+    
+    const exportData = await clientService.exportClientData(clientId, userId);
+    
+    if (!exportData) {
+      return res.status(404).json({
+        success: false,
+        error: 'Client not found'
+      } as ApiResponse);
+    }
+    
+    // Set headers for file download
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="client-${clientId}-export.json"`);
+    
+    res.json({
+      success: true,
+      data: exportData
+    } as ApiResponse);
+    
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+export default router;
+```
+
 ## 👤 User Management Model
 ### models/User.ts - User Database Operations
 ```typescript
@@ -2391,6 +3523,614 @@ export const userModel = new UserModel();
 - Efficient Queries: Optimized SELECT and INSERT operations
 - Error Handling: Comprehensive error messages for debugging
 - Type Safety: Full TypeScript integration with defined interfaces
+
+## 🏢 Client Management Model
+### models/Client.ts - Client Database Operations
+```typescript
+import { db } from '../config/database';
+import { Client, CreateClientData, UpdateClientData, ClientSummary, ClientStats, VALID_BUDGET_RANGES } from '../types';
+
+class ClientModel {
+  /**
+   * Create new client with validation
+   */
+  async createClient(userId: number, clientData: CreateClientData): Promise<Client> {
+    const { 
+      company_name, 
+      industry, 
+      website, 
+      contact_name, 
+      contact_email, 
+      contact_phone,
+      contact_role,
+      target_audience,
+      budget_range,
+      goals,
+      description,
+      brand_colors,
+      brand_guidelines,
+      notes
+    } = clientData;
+    
+    // Validate required fields
+    if (!company_name || company_name.trim().length < 2) {
+      throw new Error('Company name is required and must be at least 2 characters');
+    }
+    
+    // Validate budget range if provided
+    if (budget_range && !VALID_BUDGET_RANGES.includes(budget_range as any)) {
+      throw new Error(`Invalid budget range. Must be one of: ${VALID_BUDGET_RANGES.join(', ')}`);
+    }
+    
+    // Validate website format if provided
+    if (website && !website.match(/^https?:\/\//)) {
+      throw new Error('Website must start with http:// or https://');
+    }
+    
+    // Validate email format if provided
+    if (contact_email && !contact_email.match(/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/)) {
+      throw new Error('Invalid contact email format');
+    }
+    
+    // Check for duplicate company name for this user
+    const existingClient = await this.findByCompanyName(userId, company_name.trim());
+    if (existingClient) {
+      throw new Error('A client with this company name already exists');
+    }
+    
+    const query = `
+      INSERT INTO clients (
+        user_id, company_name, industry, website, contact_name, contact_email, 
+        contact_phone, contact_role, target_audience, budget_range, goals, 
+        description, brand_colors, brand_guidelines, notes
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      RETURNING *
+    `;
+    
+    const result = await db.query(query, [
+      userId,
+      company_name.trim(),
+      industry?.trim() || null,
+      website?.trim() || null,
+      contact_name?.trim() || null,
+      contact_email?.trim() || null,
+      contact_phone?.trim() || null,
+      contact_role?.trim() || null,
+      target_audience?.trim() || null,
+      budget_range || null,
+      goals || null,
+      description?.trim() || null,
+      brand_colors ? JSON.stringify(brand_colors) : null,
+      brand_guidelines?.trim() || null,
+      notes?.trim() || null
+    ]);
+    
+    return result.rows[0];
+  }
+
+  /**
+   * Find client by ID with ownership validation
+   */
+  async findById(clientId: number, userId: number): Promise<Client | null> {
+    const query = 'SELECT * FROM clients WHERE id = $1 AND user_id = $2 AND is_active = TRUE';
+    const result = await db.query(query, [clientId, userId]);
+    return result.rows[0] || null;
+  }
+
+  /**
+   * Get all clients for a user
+   */
+  async findByUserId(userId: number, includeInactive: boolean = false): Promise<Client[]> {
+    let query = 'SELECT * FROM clients WHERE user_id = $1';
+    if (!includeInactive) {
+      query += ' AND is_active = TRUE';
+    }
+    query += ' ORDER BY created_at DESC';
+    
+    const result = await db.query(query, [userId]);
+    return result.rows;
+  }
+
+  /**
+   * Get client summaries with content counts
+   */
+  async getClientSummaries(userId: number): Promise<ClientSummary[]> {
+    const query = `
+      SELECT 
+        c.id,
+        c.company_name,
+        c.industry,
+        c.contact_name,
+        c.created_at,
+        COUNT(cc.id) as content_count,
+        MAX(cc.created_at) as last_activity
+      FROM clients c
+      LEFT JOIN client_content cc ON c.id = cc.client_id AND cc.status = 'active'
+      WHERE c.user_id = $1 AND c.is_active = TRUE
+      GROUP BY c.id, c.company_name, c.industry, c.contact_name, c.created_at
+      ORDER BY c.created_at DESC
+    `;
+    
+    const result = await db.query(query, [userId]);
+    return result.rows.map(row => ({
+      ...row,
+      content_count: parseInt(row.content_count)
+    }));
+  }
+
+  /**
+   * Update client with dynamic fields
+   */
+  async updateClient(clientId: number, userId: number, updateData: UpdateClientData): Promise<Client | null> {
+    // Validate ownership first
+    const client = await this.findById(clientId, userId);
+    if (!client) {
+      throw new Error('Client not found or access denied');
+    }
+    
+    // Build dynamic query
+    const fields = [];
+    const values = [];
+    let paramCount = 1;
+    
+    Object.entries(updateData).forEach(([key, value]) => {
+      if (value !== undefined) {
+        fields.push(`${key} = $${paramCount++}`);
+        if (key === 'brand_colors' && typeof value === 'object') {
+          values.push(JSON.stringify(value));
+        } else if (typeof value === 'string') {
+          values.push(value.trim());
+        } else {
+          values.push(value);
+        }
+      }
+    });
+    
+    if (fields.length === 0) {
+      return client; // No changes
+    }
+    
+    fields.push(`updated_at = NOW()`);
+    values.push(clientId, userId);
+    
+    const query = `
+      UPDATE clients 
+      SET ${fields.join(', ')}
+      WHERE id = $${paramCount} AND user_id = $${paramCount + 1}
+      RETURNING *
+    `;
+    
+    const result = await db.query(query, values);
+    return result.rows[0] || null;
+  }
+
+  /**
+   * Soft delete client
+   */
+  async deleteClient(clientId: number, userId: number): Promise<boolean> {
+    const query = `
+      UPDATE clients 
+      SET is_active = FALSE, updated_at = NOW()
+      WHERE id = $1 AND user_id = $2
+    `;
+    const result = await db.query(query, [clientId, userId]);
+    return result.rowCount > 0;
+  }
+
+  /**
+   * Get client statistics
+   */
+  async getClientStats(clientId: number, userId: number): Promise<ClientStats | null> {
+    // Validate ownership
+    const client = await this.findById(clientId, userId);
+    if (!client) return null;
+    
+    const query = `
+      SELECT 
+        COUNT(*) as content_count,
+        COUNT(*) FILTER (WHERE content_type LIKE '%email%') as email_count,
+        COUNT(*) FILTER (WHERE content_type LIKE '%landing%') as landing_page_count,
+        COUNT(*) FILTER (WHERE content_type LIKE '%persona%') as persona_count,
+        COUNT(*) FILTER (WHERE content_type LIKE '%calendar%') as calendar_count,
+        MAX(created_at) as last_activity
+      FROM client_content 
+      WHERE client_id = $1 AND status = 'active'
+    `;
+    
+    const result = await db.query(query, [clientId]);
+    const stats = result.rows[0];
+    
+    return {
+      content_count: parseInt(stats.content_count),
+      email_count: parseInt(stats.email_count),
+      landing_page_count: parseInt(stats.landing_page_count),
+      persona_count: parseInt(stats.persona_count),
+      calendar_count: parseInt(stats.calendar_count),
+      last_activity: stats.last_activity
+    };
+  }
+
+  /**
+   * Search clients by company name
+   */
+  async searchClients(userId: number, searchTerm: string, limit: number = 10): Promise<Client[]> {
+    const query = `
+      SELECT * FROM clients 
+      WHERE user_id = $1 
+      AND is_active = TRUE
+      AND company_name ILIKE $2
+      ORDER BY company_name
+      LIMIT $3
+    `;
+    
+    const result = await db.query(query, [userId, `%${searchTerm}%`, limit]);
+    return result.rows;
+  }
+
+  /**
+   * Find client by company name (for duplicate checking)
+   */
+  private async findByCompanyName(userId: number, companyName: string): Promise<Client | null> {
+    const query = 'SELECT * FROM clients WHERE user_id = $1 AND LOWER(company_name) = LOWER($2) AND is_active = TRUE';
+    const result = await db.query(query, [userId, companyName]);
+    return result.rows[0] || null;
+  }
+
+  /**
+   * Validate client ownership
+   */
+  async validateOwnership(clientId: number, userId: number): Promise<boolean> {
+    const client = await this.findById(clientId, userId);
+    return !!client;
+  }
+}
+
+export const clientModel = new ClientModel();
+```
+
+### models/ClientContent.ts - AI Content Database Operations
+```typescript
+import { db } from '../config/database';
+import { ClientContent, CreateClientContentData, UpdateClientContentData, ContentType, VALID_CONTENT_TYPES } from '../types';
+
+class ClientContentModel {
+  /**
+   * Create new client content with validation
+   */
+  async createContent(userId: number, contentData: CreateClientContentData): Promise<ClientContent> {
+    const {
+      client_id,
+      content_type,
+      title,
+      content,
+      metadata = {},
+      tags,
+      ai_provider = 'claude',
+      ai_model,
+      token_count,
+      generation_time_ms,
+      conversation_history,
+      template_used,
+      platform
+    } = contentData;
+    
+    // Validate content type
+    if (!VALID_CONTENT_TYPES.includes(content_type)) {
+      throw new Error(`Invalid content type: ${content_type}`);
+    }
+    
+    // Validate required fields
+    if (!title.trim() || !content.trim()) {
+      throw new Error('Title and content are required');
+    }
+    
+    // Validate client ownership
+    const clientOwnershipQuery = 'SELECT id FROM clients WHERE id = $1 AND user_id = $2 AND is_active = TRUE';
+    const clientCheck = await db.query(clientOwnershipQuery, [client_id, userId]);
+    if (clientCheck.rows.length === 0) {
+      throw new Error('Client not found or access denied');
+    }
+    
+    const query = `
+      INSERT INTO client_content (
+        client_id, content_type, title, content, metadata, tags,
+        ai_provider, ai_model, token_count, generation_time_ms,
+        conversation_history, template_used, platform
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      RETURNING *
+    `;
+    
+    const result = await db.query(query, [
+      client_id,
+      content_type,
+      title.trim(),
+      content,
+      JSON.stringify(metadata),
+      tags || null,
+      ai_provider,
+      ai_model || null,
+      token_count || null,
+      generation_time_ms || null,
+      conversation_history ? JSON.stringify(conversation_history) : null,
+      template_used || null,
+      platform || null
+    ]);
+    
+    return result.rows[0];
+  }
+
+  /**
+   * Get content by ID with ownership validation
+   */
+  async findById(contentId: number, userId: number): Promise<ClientContent | null> {
+    const query = `
+      SELECT cc.* FROM client_content cc
+      JOIN clients c ON cc.client_id = c.id
+      WHERE cc.id = $1 AND c.user_id = $2 AND cc.status != 'deleted'
+    `;
+    const result = await db.query(query, [contentId, userId]);
+    return result.rows[0] || null;
+  }
+
+  /**
+   * Get content by client ID with filtering options
+   */
+  async findByClientId(
+    clientId: number, 
+    userId: number, 
+    options: {
+      content_type?: ContentType;
+      status?: string;
+      limit?: number;
+      offset?: number;
+      favorites_only?: boolean;
+    } = {}
+  ): Promise<{ content: ClientContent[]; hasMore: boolean }> {
+    const { content_type, status = 'active', limit = 20, offset = 0, favorites_only = false } = options;
+    
+    // Validate client ownership
+    const clientCheck = await db.query('SELECT id FROM clients WHERE id = $1 AND user_id = $2', [clientId, userId]);
+    if (clientCheck.rows.length === 0) {
+      throw new Error('Client not found or access denied');
+    }
+    
+    let query = `
+      SELECT * FROM client_content 
+      WHERE client_id = $1 AND status = $2
+    `;
+    const params: any[] = [clientId, status];
+    let paramCount = 2;
+    
+    if (content_type) {
+      paramCount++;
+      query += ` AND content_type = $${paramCount}`;
+      params.push(content_type);
+    }
+    
+    if (favorites_only) {
+      query += ` AND is_favorite = TRUE`;
+    }
+    
+    query += ` ORDER BY created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
+    params.push(limit + 1, offset); // Get one extra to check hasMore
+    
+    const result = await db.query(query, params);
+    const content = result.rows.slice(0, limit);
+    const hasMore = result.rows.length > limit;
+    
+    return { content, hasMore };
+  }
+
+  /**
+   * Update content with validation
+   */
+  async updateContent(contentId: number, userId: number, updateData: UpdateClientContentData): Promise<ClientContent | null> {
+    // Validate ownership first
+    const content = await this.findById(contentId, userId);
+    if (!content) {
+      throw new Error('Content not found or access denied');
+    }
+    
+    // Build dynamic query
+    const fields = [];
+    const values = [];
+    let paramCount = 1;
+    
+    Object.entries(updateData).forEach(([key, value]) => {
+      if (value !== undefined) {
+        fields.push(`${key} = $${paramCount++}`);
+        if (key === 'metadata' && typeof value === 'object') {
+          values.push(JSON.stringify(value));
+        } else if (typeof value === 'string') {
+          values.push(value.trim());
+        } else {
+          values.push(value);
+        }
+      }
+    });
+    
+    if (fields.length === 0) {
+      return content; // No changes
+    }
+    
+    fields.push(`updated_at = NOW()`);
+    values.push(contentId);
+    
+    const query = `
+      UPDATE client_content 
+      SET ${fields.join(', ')}
+      WHERE id = $${paramCount}
+      RETURNING *
+    `;
+    
+    const result = await db.query(query, values);
+    return result.rows[0] || null;
+  }
+
+  /**
+   * Soft delete content
+   */
+  async deleteContent(contentId: number, userId: number): Promise<boolean> {
+    const query = `
+      UPDATE client_content 
+      SET status = 'deleted', updated_at = NOW()
+      WHERE id = $1 AND id IN (
+        SELECT cc.id FROM client_content cc
+        JOIN clients c ON cc.client_id = c.id
+        WHERE c.user_id = $2
+      )
+    `;
+    const result = await db.query(query, [contentId, userId]);
+    return result.rowCount > 0;
+  }
+
+  /**
+   * Toggle favorite status
+   */
+  async toggleFavorite(contentId: number, userId: number): Promise<ClientContent | null> {
+    const query = `
+      UPDATE client_content 
+      SET is_favorite = NOT is_favorite, updated_at = NOW()
+      WHERE id = $1 AND id IN (
+        SELECT cc.id FROM client_content cc
+        JOIN clients c ON cc.client_id = c.id
+        WHERE c.user_id = $2
+      )
+      RETURNING *
+    `;
+    const result = await db.query(query, [contentId, userId]);
+    return result.rows[0] || null;
+  }
+
+  /**
+   * Get client content statistics
+   */
+  async getClientContentStats(clientId: number, userId: number): Promise<{
+    total_content: number;
+    content_by_type: Record<string, number>;
+    recent_content: ClientContent[];
+    favorites_count: number;
+  }> {
+    // Validate client ownership
+    const clientCheck = await db.query('SELECT id FROM clients WHERE id = $1 AND user_id = $2', [clientId, userId]);
+    if (clientCheck.rows.length === 0) {
+      throw new Error('Client not found or access denied');
+    }
+    
+    // Get content statistics
+    const statsQuery = `
+      SELECT 
+        COUNT(*) as total_content,
+        COUNT(*) FILTER (WHERE is_favorite = TRUE) as favorites_count,
+        json_object_agg(content_type, type_count) as content_by_type
+      FROM (
+        SELECT 
+          content_type,
+          COUNT(*) as type_count,
+          BOOL_OR(is_favorite) as is_favorite
+        FROM client_content 
+        WHERE client_id = $1 AND status = 'active'
+        GROUP BY content_type
+      ) stats
+    `;
+    
+    const recentQuery = `
+      SELECT * FROM client_content 
+      WHERE client_id = $1 AND status = 'active'
+      ORDER BY created_at DESC 
+      LIMIT 5
+    `;
+    
+    const [statsResult, recentResult] = await Promise.all([
+      db.query(statsQuery, [clientId]),
+      db.query(recentQuery, [clientId])
+    ]);
+    
+    const stats = statsResult.rows[0];
+    
+    return {
+      total_content: parseInt(stats.total_content),
+      content_by_type: stats.content_by_type || {},
+      recent_content: recentResult.rows,
+      favorites_count: parseInt(stats.favorites_count)
+    };
+  }
+
+  /**
+   * Search content across all user's clients
+   */
+  async searchContent(
+    userId: number, 
+    searchTerm: string, 
+    options: {
+      content_type?: ContentType;
+      client_id?: number;
+      limit?: number;
+    } = {}
+  ): Promise<ClientContent[]> {
+    const { content_type, client_id, limit = 50 } = options;
+    
+    let query = `
+      SELECT cc.*, c.company_name 
+      FROM client_content cc
+      JOIN clients c ON cc.client_id = c.id
+      WHERE c.user_id = $1 
+      AND cc.status = 'active'
+      AND (cc.title ILIKE $2 OR cc.content ILIKE $2)
+    `;
+    const params = [userId, `%${searchTerm}%`];
+    let paramCount = 2;
+    
+    if (content_type) {
+      paramCount++;
+      query += ` AND cc.content_type = $${paramCount}`;
+      params.push(content_type);
+    }
+    
+    if (client_id) {
+      paramCount++;
+      query += ` AND cc.client_id = $${paramCount}`;
+      params.push(client_id);
+    }
+    
+    query += ` ORDER BY cc.created_at DESC LIMIT $${paramCount + 1}`;
+    params.push(limit);
+    
+    const result = await db.query(query, params);
+    return result.rows;
+  }
+
+  /**
+   * Duplicate content for variations
+   */
+  async duplicateContent(contentId: number, newTitle: string, userId: number): Promise<ClientContent | null> {
+    const originalContent = await this.findById(contentId, userId);
+    if (!originalContent) {
+      throw new Error('Content not found or access denied');
+    }
+    
+    const query = `
+      INSERT INTO client_content (
+        client_id, content_type, title, content, metadata, tags,
+        ai_provider, ai_model, template_used, platform, parent_content_id
+      )
+      SELECT 
+        client_id, content_type, $1, content, metadata, tags,
+        ai_provider, ai_model, template_used, platform, $2
+      FROM client_content
+      WHERE id = $2
+      RETURNING *
+    `;
+    
+    const result = await db.query(query, [newTitle, contentId]);
+    return result.rows[0] || null;
+  }
+}
+
+export const clientContentModel = new ClientContentModel();
+```
 
 ## 💾 Saved Assets Model
 ### models/SavedAsset.ts - Saved Assets Database Operations
@@ -3562,6 +5302,125 @@ CREATE TRIGGER trigger_enforce_saved_assets_limit
     EXECUTE FUNCTION enforce_saved_assets_limit();
 ```
 
+### migrations/007_create_clients_table.sql - Client Management System
+```sql
+-- Create clients table for business client management
+CREATE TABLE IF NOT EXISTS clients (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    company_name VARCHAR(255) NOT NULL,
+    industry VARCHAR(100),
+    website VARCHAR(500),
+    contact_name VARCHAR(255),
+    contact_email VARCHAR(255),
+    contact_phone VARCHAR(50),
+    contact_role VARCHAR(100),
+    target_audience TEXT,
+    budget_range VARCHAR(50),
+    goals TEXT[],
+    description TEXT,
+    brand_colors JSONB DEFAULT '{}',
+    brand_guidelines TEXT,
+    notes TEXT,
+    is_active BOOLEAN DEFAULT TRUE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+    
+    -- Constraints
+    CONSTRAINT clients_company_name_length CHECK (LENGTH(company_name) >= 2 AND LENGTH(company_name) <= 255),
+    CONSTRAINT clients_website_format CHECK (website IS NULL OR website ~* '^https?://'),
+    CONSTRAINT clients_contact_email_format CHECK (contact_email IS NULL OR contact_email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'),
+    CONSTRAINT clients_budget_range_valid CHECK (budget_range IS NULL OR budget_range IN ('0-10k', '10k-50k', '50k-100k', '100k+', 'custom')),
+    CONSTRAINT clients_user_company_unique UNIQUE(user_id, company_name)
+);
+
+-- Performance indexes
+CREATE INDEX IF NOT EXISTS idx_clients_user_id ON clients(user_id);
+CREATE INDEX IF NOT EXISTS idx_clients_company_name ON clients(company_name);
+CREATE INDEX IF NOT EXISTS idx_clients_industry ON clients(industry);
+CREATE INDEX IF NOT EXISTS idx_clients_active ON clients(is_active);
+CREATE INDEX IF NOT EXISTS idx_clients_created ON clients(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_clients_user_active ON clients(user_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_clients_search ON clients USING gin(to_tsvector('english', company_name || ' ' || COALESCE(industry, '') || ' ' || COALESCE(contact_name, '')));
+
+-- Update trigger for updated_at
+CREATE TRIGGER update_clients_updated_at 
+    BEFORE UPDATE ON clients 
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
+```
+
+### migrations/008_create_client_content_table.sql - AI Content Storage System
+```sql
+-- Create client_content table for AI-generated content
+CREATE TABLE IF NOT EXISTS client_content (
+    id SERIAL PRIMARY KEY,
+    client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    content_type VARCHAR(50) NOT NULL,
+    title VARCHAR(500) NOT NULL,
+    content TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}' NOT NULL,
+    tags TEXT[],
+    status VARCHAR(20) DEFAULT 'active' NOT NULL,
+    version INTEGER DEFAULT 1 NOT NULL,
+    parent_content_id INTEGER REFERENCES client_content(id) ON DELETE SET NULL,
+    ai_provider VARCHAR(50) DEFAULT 'claude' NOT NULL,
+    ai_model VARCHAR(100),
+    token_count INTEGER,
+    generation_time_ms INTEGER,
+    conversation_history JSONB,
+    template_used VARCHAR(100),
+    platform VARCHAR(50),
+    is_favorite BOOLEAN DEFAULT FALSE NOT NULL,
+    last_accessed TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+    
+    -- Constraints
+    CONSTRAINT client_content_title_length CHECK (LENGTH(title) >= 1 AND LENGTH(title) <= 500),
+    CONSTRAINT client_content_content_not_empty CHECK (LENGTH(content) >= 1),
+    CONSTRAINT client_content_status_valid CHECK (status IN ('active', 'archived', 'draft', 'deleted')),
+    CONSTRAINT client_content_type_valid CHECK (content_type IN (
+        'email', 'newsletter', 'promotional', 'welcome', 'announcement', 'ecommerce_email',
+        'landing_page', 'saas_landing', 'ecommerce_landing', 'agency_landing', 'portfolio_landing',
+        'persona', 'buyer_persona', 'customer_persona',
+        'social_calendar', 'marketing_calendar', 'email_calendar',
+        'content_creator', 'blog_post', 'social_post', 'case_study', 'whitepaper', 'press_release',
+        'ads_analysis', 'campaign_analysis', 'prompt_library', 'custom_prompt', 'other'
+    )),
+    CONSTRAINT client_content_version_positive CHECK (version > 0),
+    CONSTRAINT client_content_token_count_positive CHECK (token_count IS NULL OR token_count > 0),
+    CONSTRAINT client_content_generation_time_positive CHECK (generation_time_ms IS NULL OR generation_time_ms > 0)
+);
+
+-- Performance indexes
+CREATE INDEX IF NOT EXISTS idx_client_content_client_id ON client_content(client_id);
+CREATE INDEX IF NOT EXISTS idx_client_content_type ON client_content(content_type);
+CREATE INDEX IF NOT EXISTS idx_client_content_status ON client_content(status);
+CREATE INDEX IF NOT EXISTS idx_client_content_created ON client_content(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_client_content_client_type ON client_content(client_id, content_type);
+CREATE INDEX IF NOT EXISTS idx_client_content_client_status ON client_content(client_id, status);
+CREATE INDEX IF NOT EXISTS idx_client_content_favorites ON client_content(client_id, is_favorite) WHERE is_favorite = TRUE;
+CREATE INDEX IF NOT EXISTS idx_client_content_parent ON client_content(parent_content_id);
+CREATE INDEX IF NOT EXISTS idx_client_content_platform ON client_content(platform);
+CREATE INDEX IF NOT EXISTS idx_client_content_ai_provider ON client_content(ai_provider);
+CREATE INDEX IF NOT EXISTS idx_client_content_accessed ON client_content(last_accessed DESC);
+
+-- Full-text search index
+CREATE INDEX IF NOT EXISTS idx_client_content_search 
+    ON client_content USING gin(to_tsvector('english', title || ' ' || content));
+
+-- JSONB indexes for metadata and conversation_history
+CREATE INDEX IF NOT EXISTS idx_client_content_metadata ON client_content USING gin(metadata);
+CREATE INDEX IF NOT EXISTS idx_client_content_conversation ON client_content USING gin(conversation_history);
+
+-- Update trigger for updated_at
+CREATE TRIGGER update_client_content_updated_at 
+    BEFORE UPDATE ON client_content 
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
+```
+
 ### Database Schema Analysis
 #### Users Table Features
 - Auto-incrementing ID: Efficient primary key
@@ -4016,160 +5875,255 @@ router.post('/search', authenticateUser, async (req: any, res) => {
 export default router;
 ```
 
-### routes/generate.ts - Content Generation Endpoint
+### routes/generate.ts - AI Generation with Client Integration
 ```typescript
 import { Router } from 'express';
 import { AIService } from '../services/aiService';
-import { validateApiKeys, AuthenticatedRequest } from '../middleware/auth';
-import { ApiResponse, GenerateRequest } from '../types';
+import { clientService } from '../services/clientService';
+import { validateApiKeys, optionalUserAuth, AuthenticatedRequest } from '../middleware/auth';
+import { ApiResponse, ConversationMessage, EnhancedGenerateRequest, ContentType, VALID_CONTENT_TYPES } from '../types';
 
 const router = Router();
 const aiService = new AIService();
 
-interface ConversationMessage {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
 /**
- * Enhanced generation route with automatic persona format enhancement
+ * POST / - Enhanced AI Generation with Client Context Support
+ * Supports both legacy single prompts and modern conversation history
+ * Automatically stores content to client when context provided
  */
-router.post('/', validateApiKeys, async (req: AuthenticatedRequest, res) => {
-  console.log('🎯 Route handler reached!');
-  console.log('📨 Request body type:', req.body.conversationHistory ? 'conversation' : 'prompt');
+router.post('/', validateApiKeys, optionalUserAuth, async (req: AuthenticatedRequest, res) => {
+  const requestId = req.headers['x-request-id'] || `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const startTime = Date.now();
+  
+  console.log(`🤖 [${requestId}] AI Generation request started`);
   
   try {
-    const { prompt, conversationHistory } = req.body;
+    const { 
+      prompt, 
+      conversationHistory, 
+      client_id,        // NEW: Client context
+      content_type,     // NEW: Content type
+      title,           // NEW: Content title
+      metadata = {},   // NEW: Additional context
+      platform,        // NEW: Platform context
+      template_used,   // NEW: Template context
+      options = {}     // NEW: Generation options
+    }: EnhancedGenerateRequest = req.body;
 
-    // Support both conversation history (new) and single prompt (legacy)
-    let finalConversationHistory: ConversationMessage[];
-
-    if (conversationHistory) {
-      // New conversation-based request
-      console.log('💬 Conversation request - messages:', conversationHistory.length);
-      
-      // Validate conversation history format
-      if (!Array.isArray(conversationHistory)) {
-        console.log('❌ Validation failed: conversationHistory must be an array');
-        return res.status(400).json({
-          success: false,
-          error: 'conversationHistory must be an array of messages'
-        } as ApiResponse);
-      }
-
-      if (conversationHistory.length === 0) {
-        console.log('❌ Validation failed: conversationHistory cannot be empty');
-        return res.status(400).json({
-          success: false,
-          error: 'conversationHistory cannot be empty'
-        } as ApiResponse);
-      }
-
-      // Validate each message in conversation
-      for (let i = 0; i < conversationHistory.length; i++) {
-        const message = conversationHistory[i];
-        if (!message.role || !message.content) {
-          console.log(`❌ Validation failed: Invalid message at index ${i}`);
-          return res.status(400).json({
-            success: false,
-            error: `Invalid message at index ${i}: must have role and content`
-          } as ApiResponse);
-        }
-        if (!['user', 'assistant'].includes(message.role)) {
-          console.log(`❌ Validation failed: Invalid role at index ${i}: ${message.role}`);
-          return res.status(400).json({
-            success: false,
-            error: `Invalid role at index ${i}: must be 'user' or 'assistant'`
-          } as ApiResponse);
-        }
-      }
-
-      finalConversationHistory = conversationHistory;
-      
-      // Enhanced logging for persona detection
-      const lastUserMessage = conversationHistory
-        .filter(msg => msg.role === 'user')
-        .pop();
-      
-      const isPersonaRequest = lastUserMessage ? 
-        ['persona', 'buyer persona', 'customer persona', 'target customer', 'target audience']
-          .some(keyword => lastUserMessage.content.toLowerCase().includes(keyword)) : false;
-      
-      console.log('🎭 Persona request detected:', isPersonaRequest);
-      
-      // Estimate token usage for logging
-      const estimatedTokens = aiService.estimateConversationTokens(conversationHistory);
-      console.log('📊 Estimated conversation tokens:', estimatedTokens);
-      
-      // Log conversation structure
-      const roleCount = conversationHistory.reduce((acc, msg) => {
-        acc[msg.role] = (acc[msg.role] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
-      console.log('📋 Conversation structure:', roleCount);
-
-    } else if (prompt) {
-      // Legacy single prompt request - convert to conversation format
-      console.log('📝 Legacy prompt request');
-      
-      const isPersonaRequest = ['persona', 'buyer persona', 'customer persona', 'target customer', 'target audience']
-        .some(keyword => prompt.toLowerCase().includes(keyword));
-      
-      console.log('🎭 Persona request detected:', isPersonaRequest);
-      console.log('📋 User prompt preview:', prompt.substring(0, 100) + '...');
-      
-      finalConversationHistory = [{ role: 'user', content: prompt }];
-      console.log('🔄 Converted single prompt to conversation format');
-      
-    } else {
-      // No valid input provided
-      console.log('❌ Validation failed: No prompt or conversationHistory provided');
+    const apiKeys = req.apiKeys;
+    
+    // Enhanced input validation
+    if (!prompt && (!conversationHistory || conversationHistory.length === 0)) {
       return res.status(400).json({
         success: false,
         error: 'Either prompt or conversationHistory is required'
       } as ApiResponse);
     }
 
-    console.log('✅ Request validation passed');
+    // Validate client context if provided
+    if (client_id && !req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'User authentication required for client context'
+      } as ApiResponse);
+    }
+
+    // Validate content type if provided
+    if (content_type && !VALID_CONTENT_TYPES.includes(content_type)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid content type. Must be one of: ${VALID_CONTENT_TYPES.join(', ')}`
+      } as ApiResponse);
+    }
+
+    // Log client context if provided
+    if (client_id && req.user) {
+      console.log(`🏢 [${requestId}] Client context: client_id=${client_id}, content_type=${content_type}, user=${req.user.email}`);
+    }
+
+    // Prepare conversation history
+    let finalConversationHistory: ConversationMessage[];
+    
+    if (conversationHistory && conversationHistory.length > 0) {
+      // Modern conversation-aware request
+      finalConversationHistory = conversationHistory;
+      console.log(`💬 [${requestId}] Conversation mode: ${conversationHistory.length} messages`);
+    } else {
+      // Legacy single-prompt request - convert to conversation format
+      finalConversationHistory = [{ role: 'user', content: prompt }];
+      console.log(`📝 [${requestId}] Legacy prompt mode: "${prompt.substring(0, 100)}..."`);
+    }
+
+    // Validate conversation format
+    const isValidConversation = finalConversationHistory.every(msg => 
+      msg && 
+      typeof msg.role === 'string' && 
+      ['user', 'assistant'].includes(msg.role) &&
+      typeof msg.content === 'string' &&
+      msg.content.trim().length > 0
+    );
+
+    if (!isValidConversation) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid conversation format. Each message must have role ("user" or "assistant") and content.'
+      } as ApiResponse);
+    }
+
+    // Token management and conversation trimming
+    const estimatedTokens = aiService.estimateConversationTokens(finalConversationHistory);
+    console.log(`📊 [${requestId}] Estimated tokens: ${estimatedTokens}`);
+    
+    if (estimatedTokens > 45000) {
+      finalConversationHistory = aiService.trimConversationHistory(finalConversationHistory, 45000);
+      console.log(`✂️ [${requestId}] Conversation trimmed to ${finalConversationHistory.length} messages`);
+    }
+
+    // Enhanced content analysis for better processing
+    const lastUserMessage = finalConversationHistory
+      .filter(msg => msg.role === 'user')
+      .pop();
+    
+    const contentAnalysis = {
+      isPersonaRequest: lastUserMessage ? 
+        ['persona', 'buyer persona', 'customer persona', 'target customer', 'target audience']
+          .some(keyword => lastUserMessage.content.toLowerCase().includes(keyword)) : false,
+      isEmailRequest: lastUserMessage ?
+        ['email', 'newsletter', 'subject line', 'email campaign']
+          .some(keyword => lastUserMessage.content.toLowerCase().includes(keyword)) : false,
+      isLandingPageRequest: lastUserMessage ?
+        ['landing page', 'website', 'homepage', 'web page']
+          .some(keyword => lastUserMessage.content.toLowerCase().includes(keyword)) : false,
+      isCalendarRequest: lastUserMessage ?
+        ['calendar', 'schedule', 'content calendar', 'social calendar']
+          .some(keyword => lastUserMessage.content.toLowerCase().includes(keyword)) : false
+    };
+
+    // Build enhanced system prompt with client context
+    let systemPrompt = 'You are Claude, a helpful AI assistant specialized in marketing and business content creation.';
+    
+    if (client_id && req.user) {
+      try {
+        const clientInfo = await clientService.getClientWithMetrics(client_id, req.user.id);
+        if (clientInfo) {
+          systemPrompt += `\n\nClient Context:
+- Company: ${clientInfo.client.company_name}
+- Industry: ${clientInfo.client.industry || 'Not specified'}
+- Target Audience: ${clientInfo.client.target_audience || 'Not specified'}
+- Goals: ${clientInfo.client.goals?.join(', ') || 'Not specified'}`;
+          
+          if (clientInfo.client.brand_guidelines) {
+            systemPrompt += `\n- Brand Guidelines: ${clientInfo.client.brand_guidelines}`;
+          }
+        }
+      } catch (clientError) {
+        console.warn(`⚠️ [${requestId}] Could not load client context:`, clientError);
+      }
+    }
+
+    // Add content type specific guidance
+    if (content_type) {
+      const contentGuidance = {
+        'email': 'Focus on compelling subject lines, clear calls-to-action, and engaging email content.',
+        'newsletter': 'Create informative, valuable content that subscribers will want to read and share.',
+        'landing_page': 'Prioritize conversion optimization with clear value propositions and strong CTAs.',
+        'persona': 'Develop detailed, research-based buyer personas with demographics, pain points, and motivations.',
+        'social_calendar': 'Plan diverse, engaging social media content with optimal posting schedules.',
+        'blog_post': 'Write SEO-optimized, valuable content that addresses audience pain points.'
+      };
+      
+      if (contentGuidance[content_type as keyof typeof contentGuidance]) {
+        systemPrompt += `\n\nContent Type: ${content_type}\nGuidance: ${contentGuidance[content_type as keyof typeof contentGuidance]}`;
+      }
+    }
 
     // Validate Claude API key is available
-    if (!req.apiKeys.anthropic) {
-      console.log('❌ No Claude API key available');
+    if (!apiKeys.anthropic) {
+      console.log(`❌ [${requestId}] No Claude API key available`);
       return res.status(400).json({
         success: false,
         error: 'Claude API key not configured. Please add it in Settings.'
       } as ApiResponse);
     }
 
-    console.log('🚀 Sending conversation to Claude with auto-enhancement support');
-
-    // Send conversation history to Claude with automatic persona enhancement
-    // The aiService.generate() method will automatically detect persona requests
-    // and enhance them with structured format requirements
-    const response = await aiService.generate(
-      finalConversationHistory,
-      req.apiKeys,
-      'You are a helpful assistant that creates exactly what the user requests.'
-    );
+    // Generate content with Claude
+    console.log(`🎯 [${requestId}] Sending to Claude API...`);
+    const response = await aiService.generate(finalConversationHistory, apiKeys, systemPrompt);
+    const processingTime = Date.now() - startTime;
     
-    console.log('✅ Claude generation successful, response length:', response.length);
-    console.log('📝 Claude response preview:', response.substring(0, 200) + '...');
+    console.log(`✅ [${requestId}] Claude response received (${processingTime}ms)`);
 
-    // Check if response looks like a structured persona
-    const isStructuredPersona = response.includes('DEMOGRAPHIC PROFILE') || 
-                               response.includes('GOALS & MOTIVATIONS') ||
-                               response.includes('BUYING PROCESS & INFLUENCES');
-    
-    if (isStructuredPersona) {
-      console.log('🎯 Structured persona response generated successfully');
+    // Store content to client if context provided
+    let contentStored = false;
+    let storedContentId: number | null = null;
+
+    if (client_id && content_type && req.user) {
+      try {
+        const contentCreationData = {
+          client_id: Number(client_id),
+          content_type: content_type as ContentType,
+          title: title || `Generated ${content_type} - ${new Date().toLocaleDateString()}`,
+          content: response,
+          metadata: {
+            ...metadata,
+            request_id: requestId,
+            processing_time_ms: processingTime,
+            conversation_length: finalConversationHistory.length,
+            content_analysis: contentAnalysis,
+            generated_at: new Date().toISOString(),
+            system_prompt_used: systemPrompt.length > 500 ? 'Enhanced with client context' : 'Standard'
+          },
+          ai_provider: 'claude',
+          ai_model: 'claude-sonnet-4-20250514',
+          token_count: estimatedTokens,
+          generation_time_ms: processingTime,
+          conversation_history: finalConversationHistory.length > 1 ? finalConversationHistory : null,
+          template_used: template_used || null,
+          platform: platform || null
+        };
+
+        const storedContent = await clientService.storeGeneratedContent(
+          req.user.id,
+          contentCreationData
+        );
+        
+        contentStored = true;
+        storedContentId = storedContent.id;
+        
+        console.log(`💾 [${requestId}] Content stored to client ${client_id} with ID ${storedContentId}`);
+        
+      } catch (contentError: any) {
+        console.error(`⚠️ [${requestId}] Failed to store content to client:`, contentError.message);
+        // Don't fail the request if content storage fails
+      }
     }
 
-    console.log('📤 Sending Claude response directly to client...');
+    // Enhanced response with comprehensive metadata
     res.json({
       success: true,
       data: {
         content: response,
-        provider: 'claude'
+        provider: 'claude',
+        model: 'claude-sonnet-4-20250514',
+        metadata: {
+          request_id: requestId,
+          processing_time_ms: processingTime,
+          token_count: estimatedTokens,
+          message_count: finalConversationHistory.length,
+          content_analysis: contentAnalysis,
+          content_stored: contentStored,        // NEW
+          stored_content_id: storedContentId,   // NEW
+          client_id: client_id || null,         // NEW
+          content_type: content_type || null,   // NEW
+          platform: platform || null,          // NEW
+          template_used: template_used || null  // NEW
+        }
+      },
+      performance: {
+        request_time: processingTime,
+        conversation_messages: finalConversationHistory.length,
+        estimated_tokens: estimatedTokens,
+        provider_latency: processingTime
       },
       message: conversationHistory 
         ? `Content generated successfully using Claude (${conversationHistory.length} messages in conversation)`
@@ -4177,19 +6131,46 @@ router.post('/', validateApiKeys, async (req: AuthenticatedRequest, res) => {
     } as ApiResponse);
 
   } catch (error: any) {
-    console.error('❌ Generation error:', error);
-    console.error('Error stack:', error.stack);
+    const processingTime = Date.now() - startTime;
     
-    // Enhanced error handling for persona-specific issues
+    console.error(`❌ [${requestId}] Generation failed (${processingTime}ms):`, error.message);
+    
+    // Enhanced error handling for different error types
     let errorMessage = error.message || 'Failed to generate content';
-    
-    if (error.message?.includes('persona') || error.message?.includes('structure')) {
+    let errorCode = 'GENERATION_ERROR';
+    let statusCode = 500;
+
+    if (error.message?.includes('API key')) {
+      errorMessage = 'Invalid or missing Claude API key';
+      errorCode = 'INVALID_API_KEY';
+      statusCode = 401;
+    } else if (error.message?.includes('rate limit')) {
+      errorMessage = 'API rate limit exceeded. Please wait and try again.';
+      errorCode = 'RATE_LIMITED';
+      statusCode = 429;
+    } else if (error.message?.includes('token')) {
+      errorMessage = 'Request too large. Please reduce conversation length.';
+      errorCode = 'TOKEN_LIMIT_EXCEEDED';
+      statusCode = 413;
+    } else if (error.message?.includes('client') || error.message?.includes('CLIENT')) {
+      errorMessage = 'Client validation failed. Please check client context.';
+      errorCode = 'CLIENT_ERROR';
+      statusCode = 400;
+    } else if (error.message?.includes('persona') || error.message?.includes('structure')) {
       errorMessage = 'Failed to generate structured persona content. Please try rephrasing your request.';
+      errorCode = 'PERSONA_ERROR';
+      statusCode = 400;
     }
-    
-    res.status(500).json({
+
+    res.status(statusCode).json({
       success: false,
-      error: errorMessage
+      error: errorMessage,
+      code: errorCode,
+      metadata: {
+        request_id: requestId,
+        processing_time_ms: processingTime,
+        provider: 'claude'
+      }
     } as ApiResponse);
   }
 });
