@@ -9,17 +9,19 @@
 5. Component System
 6. Page Components Implementation
 7. Conversation Memory System
-8. Modal Implementation
-9. Asset System Implementation
-10. API Integration Patterns
-11. UI Patterns & Styling
-12. State Management Implementation
-13. Export & Download System
-14. Development Patterns
-15. Enhanced Authentication System
-16. Email Verification & Password Reset
-17. Enhanced User Profile Management
-18. Authentication UI Components
+8. Event-Based Communication System                    
+9. Modal Implementation                                
+10. Asset System Implementation                        
+11. API Integration Patterns                          
+12. UI Patterns & Styling                            
+13. State Management Implementation                  
+14. Export & Download System                         
+15. Development Patterns                              
+16. Enhanced Authentication System                   
+17. Email Verification & Password Reset               
+18. Enhanced User Profile Management                  
+19. Saved Assets System Implementation                
+20. Authentication UI Components                     
     
 ## 1. Architecture Overview
 ### 1.1 Current Technology Stack
@@ -211,6 +213,7 @@ Based on imports and file organization:
 │   ├───Common
 │   │       DownloadButton.tsx
 │   │       MultiSelect.tsx
+│   │       SaveButton.tsx 
 │   │
 │   ├───Layout
 │   │       Header.tsx
@@ -235,6 +238,7 @@ Based on imports and file organization:
 │           MarketingCalendar.tsx
 │           PersonaBuilder.tsx
 │           PromptLibrary.tsx
+│           SavedAssets.tsx 
 │           Settings.tsx
 │           SocialCalendar.tsx
 │
@@ -308,6 +312,10 @@ const pageData = {
   'prompt-library': {
     title: 'Prompt Library',
     subtitle: 'Claude-optimized prompts for all your tools'
+  },
+  'saved-assets': {                           
+    title: 'Saved Assets',
+    subtitle: 'Manage and reuse your saved content across all tools'
   },
   'settings': {
     title: 'Settings',
@@ -462,21 +470,64 @@ const closeGuidelinesModal = () => {
 ```typescript
 // In PreviewModal onUse handler:
 onUse={(data) => {
-  // Navigate to appropriate generator and trigger the use functionality
-  if (activePage === 'email-generator') {
-    setActivePage('email-generator');
-  } else if (activePage === 'landing-page-builder') {
-    setActivePage('landing-page-builder');
-  } else {
-    // Default to email generator if called from other pages
-    setActivePage('email-generator');
+  // Handle template/wireframe usage (existing logic)
+  if (data.type === 'template' || data.type === 'wireframe') {
+    if (activePage === 'email-generator') {
+      setActivePage('email-generator');
+    } else if (activePage === 'landing-page-builder') {
+      setActivePage('landing-page-builder');
+    } else {
+      // Default to email generator if called from other pages
+      setActivePage('email-generator');
+    }
+    
+    // The respective component will handle the actual template/wireframe usage
+    setTimeout(() => {
+      const event = new CustomEvent('useTemplateOrWireframe', { detail: data });
+      window.dispatchEvent(event);
+    }, 100);
   }
   
-  // The respective component will handle the actual template/wireframe usage
-  setTimeout(() => {
-    const event = new CustomEvent('useTemplateOrWireframe', { detail: data });
-    window.dispatchEvent(event);
-  }, 100);
+  // Handle saved asset reuse                    ← ADD THIS ENTIRE SECTION
+  else if (data.type === 'saved-asset') {
+    const asset = data.asset;
+    
+    // Navigate to appropriate tool based on asset type
+    if (asset.asset_type === 'email-built' || asset.asset_type === 'email') {
+      setActivePage('email-generator');
+      setTimeout(() => {
+        const event = new CustomEvent('reuseSavedAsset', { detail: { asset } });
+        window.dispatchEvent(event);
+      }, 100);
+    } else if (asset.asset_type === 'landing') {
+      setActivePage('landing-page-builder');
+      setTimeout(() => {
+        const event = new CustomEvent('reuseSavedAsset', { detail: { asset } });
+        window.dispatchEvent(event);
+      }, 100);
+    } else if (asset.asset_type === 'marketing') {
+      setActivePage('marketing-calendar');
+      setTimeout(() => {
+        const event = new CustomEvent('populateCalendarContent', { detail: { asset } });
+        window.dispatchEvent(event);
+      }, 100);
+    } else if (asset.asset_type === 'social') {
+      setActivePage('social-calendar');
+      setTimeout(() => {
+        const event = new CustomEvent('populateCalendarContent', { detail: { asset } });
+        window.dispatchEvent(event);
+      }, 100);
+    } else if (asset.asset_type === 'email') {
+      setActivePage('email-calendar');
+      setTimeout(() => {
+        const event = new CustomEvent('populateCalendarContent', { detail: { asset } });
+        window.dispatchEvent(event);
+      }, 100);
+    }
+    
+    // Close the modal after triggering reuse
+    closePreviewModal();
+  }
 }}
 ```
 
@@ -504,6 +555,8 @@ const renderActivePage = () => {
       return <AdsAnalysis />;
     case 'prompt-library':
       return <PromptLibrary />;
+    case 'saved-assets':                        
+      return <SavedAssets openPreviewModal={openPreviewModal} />;
     case 'settings':
       return <Settings />;
     default:
@@ -694,6 +747,89 @@ async validateAnthropicKey(apiKey: string): Promise<ApiResponse> {
   return this.makeRequest('validate/anthropic', {
     method: 'POST',
     body: JSON.stringify({ apiKey })
+  });
+}
+```
+
+#### Saved Assets API Methods:                    
+```typescript
+/**
+ * Get user's saved assets with filtering
+ */
+async getSavedAssets(filters?: {
+  type?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<ApiResponse> {
+  const params = new URLSearchParams();
+  if (filters?.type && filters.type !== 'all') params.append('type', filters.type);
+  if (filters?.search) params.append('search', filters.search);
+  if (filters?.limit) params.append('limit', filters.limit.toString());
+  if (filters?.offset) params.append('offset', filters.offset.toString());
+  
+  return this.makeRequest(`saved-assets?${params.toString()}`, {
+    method: 'GET'
+  });
+}
+
+/**
+ * Create new saved asset
+ */
+async createSavedAsset(data: {
+  assetType: string;
+  title: string;
+  content: string;
+  metadata?: Record<string, any>;
+}): Promise<ApiResponse> {
+  return this.makeRequest('saved-assets', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+}
+
+/**
+ * Update existing saved asset
+ */
+async updateSavedAsset(assetId: number, data: {
+  title?: string;
+  content?: string;
+  metadata?: Record<string, any>;
+}): Promise<ApiResponse> {
+  return this.makeRequest(`saved-assets/${assetId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data)
+  });
+}
+
+/**
+ * Delete saved asset
+ */
+async deleteSavedAsset(assetId: number): Promise<ApiResponse> {
+  return this.makeRequest(`saved-assets/${assetId}`, {
+    method: 'DELETE'
+  });
+}
+
+/**
+ * Get asset statistics
+ */
+async getSavedAssetStats(): Promise<ApiResponse> {
+  return this.makeRequest('saved-assets/stats', {
+    method: 'GET'
+  });
+}
+
+/**
+ * Search saved assets
+ */
+async searchSavedAssets(data: {
+  searchTerm: string;
+  assetType?: string;
+}): Promise<ApiResponse> {
+  return this.makeRequest('saved-assets/search', {
+    method: 'POST',
+    body: JSON.stringify(data)
   });
 }
 ```
@@ -1198,9 +1334,22 @@ Always-dark sidebar with navigation sections:
 - General: Dashboard
 - Calendar: Marketing Calendar, Social Media Calendar, Email Calendar
 - Tools: Email Generator, Landing Page Builder, Persona Builder, Content Creator, Ads Analysis
-- Other: Prompt Library, Settings
+- Library: Prompt Library, Saved Assets                    
+- Other: Settings
 
 Uses dedicated Sidebar.css for styling.
+
+#### Navigation Structure Update:
+```typescript
+// Library section in sidebar navigation
+{
+  section: 'Library',
+  items: [
+    { page: 'prompt-library', icon: Book, title: 'Prompt Library' },
+    { page: 'saved-assets', icon: Archive, title: 'Saved Assets' }    
+  ]
+}
+```
 
 ### 5.2 Common Components
 #### DownloadButton.tsx
@@ -1226,6 +1375,38 @@ interface MultiSelectProps {
 ```
 
 Multi-selection component with tag-based display and checkbox dropdown.
+
+#### SaveButton.tsx
+```typescript
+interface SaveButtonProps {
+  content: string;
+  assetType: AssetType;
+  defaultTitle: string;
+  metadata?: Record<string, any>;
+  onSaveSuccess?: (asset: SavedAsset) => void;
+  onSaveError?: (error: string) => void;
+  className?: string;
+  disabled?: boolean;
+}
+
+type AssetType = 
+  | 'marketing' 
+  | 'social' 
+  | 'email' 
+  | 'email-built' 
+  | 'landing' 
+  | 'persona' 
+  | 'content' 
+  | 'ads';
+```
+
+- Reusable save button component for saving generated content across all marketing tools. Features:
+   - Asset type validation and mapping
+   - 100-item limit enforcement per user
+   - Save confirmation with editable titles
+   - Success/error callbacks for tool integration
+   - Loading states during save operations
+   - Integration with conversation memory systems
 
 ## 6. Page Components Implementation
 ### 6.1 ContentCreator.tsx
@@ -1275,6 +1456,70 @@ const contentTypes = [
   whiteSpace: 'pre-wrap'
 }}>
 ```
+
+#### SaveButton Integration:
+```typescript
+import SaveButton from '../Common/SaveButton';
+
+// SaveButton integration in content actions
+{contentPreview && (
+  <div className="content-actions">
+    <button className="copy-btn" onClick={copyContent}>
+      <Copy size={16} />
+      Copy to Clipboard
+    </button>
+    
+    <SaveButton
+      content={contentPreview}
+      assetType="content"
+      defaultTitle={`${selectedContentType.replace('-', ' ')} Content`}
+      metadata={{ 
+        tool: 'content-creator', 
+        contentType: selectedContentType,
+        previewMode: previewMode,
+        generatedAt: new Date().toISOString()
+      }}
+      onSaveSuccess={(savedAsset) => {
+        alert(`Content saved as "${savedAsset.title}"`);
+      }}
+      onSaveError={(error) => {
+        console.error('Save failed:', error);
+        alert('Failed to save content. Please try again.');
+      }}
+    />
+  </div>
+)}
+```
+
+#### Content Type Asset Mapping:
+```typescript
+// Dynamic title generation based on content type
+const generateAssetTitle = (contentType: string): string => {
+  const typeLabels = {
+    'blog': 'Blog Post',
+    'social-media': 'Social Media Post',
+    'emailer': 'Email Content',
+    'case-study': 'Case Study',
+    'press-release': 'Press Release',
+    'whitepaper': 'Whitepaper',
+    'video-script': 'Video Script',
+    'infographic': 'Infographic Content',
+    'product-description': 'Product Description',
+    'landing-copy': 'Landing Page Copy',
+    'ad-copy': 'Ad Copy',
+    'newsletter': 'Newsletter Content'
+  };
+  
+  return typeLabels[contentType] || 'Generated Content';
+};
+```
+
+- Key Features:
+   - Save any of the 12 supported content types with appropriate titles
+   - Preserve content type and preview mode in metadata
+   - Simple success notification through browser alert
+   - Error handling for save failures
+   - Integration with existing copy-to-clipboard functionality
 
 ### 6.2 Auth.tsx
 Purpose: Complete authentication system with email verification, password reset, and enhanced user profiles
@@ -1648,6 +1893,71 @@ const filteredTemplates = templateFilter === 'all'
 // Filter buttons for categories: newsletter, promotional, welcome, announcement, ecommerce
 ```
 
+#### SaveButton Integration: 
+```typescript
+import SaveButton from '../Common/SaveButton';
+
+// SaveButton integration in chat input area
+<div className="chat-input-area">
+  <button className="send-btn" onClick={sendMessage}>
+    <Send size={16} />
+  </button>
+  
+  {emailPreview && (
+    <SaveButton
+      content={emailPreview}
+      assetType="email-built"
+      defaultTitle="Generated Email"
+      metadata={{ 
+        tool: 'email-generator',
+        templateMode: templateMode,
+        platform: 'email',
+        conversationLength: conversationHistory.length
+      }}
+      onSaveSuccess={(savedAsset) => {
+        setMessages(prev => [...prev, {
+          type: 'ai',
+          content: `✅ Email saved as "${savedAsset.title}"`
+        }]);
+      }}
+    />
+  )}
+</div>
+
+// Reuse event listener for saved asset integration
+useEffect(() => {
+  const handleReuseSavedAsset = (event: any) => {
+    const { asset } = event.detail;
+    if (asset.asset_type === 'email' || asset.asset_type === 'email-built') {
+      setEmailPreview(asset.content);
+      setChatInput(`Reusing saved asset: ${asset.title}`);
+      
+      const newHistory = [...conversationHistory,
+        { role: 'user', content: `Reuse this saved content: ${asset.title}` },
+        { role: 'assistant', content: asset.content }
+      ];
+      setConversationHistory(newHistory);
+      
+      const newTokenCount = calculateConversationTokens(newHistory);
+      setTokenCount(newTokenCount);
+      
+      setMessages(prev => [...prev, {
+        type: 'ai',
+        content: `✅ Loaded saved email: "${asset.title}"`
+      }]);
+    }
+  };
+
+  window.addEventListener('reuseSavedAsset', handleReuseSavedAsset);
+  return () => window.removeEventListener('reuseSavedAsset', handleReuseSavedAsset);
+}, [conversationHistory]);
+```
+- Key Features:
+   - Save generated emails with metadata including template mode and conversation context
+   - Reuse saved emails with automatic conversation history integration
+   - Success messaging through existing chat interface
+   - Token count preservation during asset reuse
+
 ### 6.5 LandingPageBuilder.tsx
 Purpose: Multi-platform landing page creation with professional file separation
 #### "Dumb Pipeline" Architecture:
@@ -1725,6 +2035,82 @@ const downloadZipPackage = async () => {
 - Shopify: index.liquid + assets/theme.css + assets/theme.js
 - React: App.jsx + App.css + package.json
 - Vue: App.vue + style.css + package.json
+
+#### SaveButton Integration with Multi-File Support:
+```typescript
+import SaveButton from '../Common/SaveButton';
+
+// SaveButton integration with multi-file content handling
+<div className="landing-page-actions">
+  <button className="send-btn" onClick={sendMessage}>
+    <Send size={16} />
+  </button>
+  
+  {(landingPagePreview || (isMultiFileMode && Object.keys(multiFileContent).length > 0)) && (
+    <SaveButton
+      content={isMultiFileMode ? JSON.stringify(multiFileContent) : landingPagePreview}
+      assetType="landing"
+      defaultTitle="Generated Landing Page"
+      metadata={{ 
+        tool: 'landing-page-builder', 
+        platform: selectedPlatform,
+        isMultiFile: isMultiFileMode,
+        conversationLength: conversationHistory.length
+      }}
+      onSaveSuccess={(savedAsset) => {
+        setMessages(prev => [...prev, {
+          type: 'ai',
+          content: `✅ Landing page saved as "${savedAsset.title}"`
+        }]);
+      }}
+    />
+  )}
+</div>
+
+// Enhanced reuse event listener with multi-file support
+useEffect(() => {
+  const handleReuseSavedAsset = (event: any) => {
+    const { asset } = event.detail;
+    if (asset.asset_type === 'landing') {
+      // Try to parse as multi-file content first
+      try {
+        const parsedContent = JSON.parse(asset.content);
+        if (typeof parsedContent === 'object' && parsedContent !== null) {
+          setMultiFileContent(parsedContent);
+          setIsMultiFileMode(true);
+        } else {
+          setLandingPagePreview(asset.content);
+          setIsMultiFileMode(false);
+        }
+      } catch {
+        setLandingPagePreview(asset.content);
+        setIsMultiFileMode(false);
+      }
+      
+      // Update conversation and UI
+      setChatInput(`Reusing saved asset: ${asset.title}`);
+      const newHistory = [...conversationHistory, 
+        { role: 'user', content: `Reuse this saved content: ${asset.title}` },
+        { role: 'assistant', content: asset.content }
+      ];
+      setConversationHistory(newHistory);
+      
+      setMessages(prev => [...prev, {
+        type: 'ai',
+        content: `✅ Loaded saved landing page: "${asset.title}"`
+      }]);
+    }
+  };
+
+  window.addEventListener('reuseSavedAsset', handleReuseSavedAsset);
+  return () => window.removeEventListener('reuseSavedAsset', handleReuseSavedAsset);
+}, [conversationHistory]);
+```
+- Multi-File Content Handling:
+   - Single-File Mode: Saves HTML content directly as string
+   - Multi-File Mode: Saves JSON object with filename-content mapping
+   - Reuse Logic: Automatically detects and restores appropriate content mode
+   - Platform Context: Preserves selected platform information in metadata
 
 ### 6.6 PersonaBuilder.tsx
 Purpose: AI-powered customer persona creation and management
@@ -1808,6 +2194,66 @@ const personas = [
 
 const currentPersona = personas.find(p => p.id === selectedPersona) || personas[0];
 ```
+
+#### SaveButton Integration and Legacy Cleanup:
+```typescript
+import SaveButton from '../Common/SaveButton';
+
+// Helper function for persona name extraction
+const extractPersonaName = (personaContent: string): string => {
+  if (typeof personaContent === 'object' && personaContent.name) {
+    return personaContent.name;
+  }
+  
+  if (typeof personaContent === 'string') {
+    const nameMatch = personaContent.match(/\*\*Name:\*\*\s*([^\n\r]+)/i);
+    if (nameMatch) {
+      return nameMatch[1].trim();
+    }
+    
+    const firstLine = personaContent.split('\n')[0];
+    return firstLine.length > 50 ? 'Generated Persona' : firstLine;
+  }
+  
+  return 'Generated Persona';
+};
+
+// SaveButton integration in persona actions
+{generatedPersona && (
+  <div className="persona-actions">
+    <SaveButton
+      content={JSON.stringify(generatedPersona)}
+      assetType="persona"
+      defaultTitle={extractPersonaName(generatedPersona) || 'Generated Persona'}
+      metadata={{ 
+        tool: 'persona-builder',
+        generatedAt: new Date().toISOString(),
+        tokenCount: tokenCount
+      }}
+      onSaveSuccess={(savedAsset) => {
+        setMessages(prev => [...prev, {
+          type: 'ai',
+          content: `✅ Persona saved as "${savedAsset.title}"`
+        }]);
+      }}
+    />
+  </div>
+)}
+```
+
+#### Legacy Feature Cleanup:
+- REMOVED Components:
+   - ❌ Entire "Saved Personas" tab system
+   - ❌ All mock saved persona data and management
+   - ❌ Local persona storage logic using localStorage
+   - ❌ Saved persona selection and display components
+   - ❌ Two-tab system (now single "new-persona" tab only)
+
+#### UPDATED Architecture:
+- ✅ Single-tab interface focused on persona generation
+- ✅ Integration with centralized SavedAssets system
+- ✅ Removed duplicate persona management functionality
+- ✅ Streamlined UI without local persona storage
 
 ### 6.7 SocialCalendar.tsx
 Purpose: Social media content calendar with platform-specific optimization
@@ -2243,6 +2689,70 @@ Please analyze this data and provide insights...`;
 }
 ```
 
+#### SaveButton Integration:
+```typescript
+import SaveButton from '../Common/SaveButton';
+
+// SaveButton integration in preview actions
+<div className="preview-actions">
+  <button className="btn btn-secondary" onClick={downloadAnalysisCode}>
+    <Download size={16} />
+    Download
+  </button>
+  <button className="btn" onClick={copyAnalysisCode}>
+    <Copy size={16} />
+    Copy
+  </button>
+  {analysisPreview && (
+    <SaveButton
+      content={analysisPreview}
+      assetType="ads"
+      defaultTitle={`Ads Analysis Report - ${fileName || 'Data'}`}
+      metadata={{ 
+        tool: 'ads-analysis', 
+        dataSource: fileName,
+        fileSize: uploadedData?.length || 0,
+        analysisDate: new Date().toISOString(),
+        tokenCount: tokenCount
+      }}
+      onSaveSuccess={(savedAsset) => {
+        setMessages(prev => [...prev, {
+          type: 'ai',
+          content: `✅ Analysis saved as "${savedAsset.title}"`
+        }]);
+      }}
+      onSaveError={(error) => {
+        setMessages(prev => [...prev, {
+          type: 'ai',
+          content: `❌ Failed to save analysis: ${error}`
+        }]);
+      }}
+    />
+  )}
+</div>
+```
+
+#### Analysis Report Metadata:
+```typescript
+// Enhanced metadata tracking for ads analysis
+const generateAnalysisMetadata = (fileName: string, uploadedData: string) => ({
+  tool: 'ads-analysis',
+  dataSource: fileName || 'Unknown',
+  fileSize: uploadedData?.length || 0,
+  fileType: fileName?.split('.').pop()?.toLowerCase() || 'csv',
+  analysisDate: new Date().toISOString(),
+  reportType: 'ads-performance-analysis',
+  tokenCount: tokenCount
+});
+```
+
+- Key Features:
+   - Save HTML analysis reports with data source tracking
+   - Preserve original filename and file size in metadata
+   - Integration with existing conversation memory system
+   - Success/error messaging through AI chat interface
+   - Report naming based on data source filename
+
 #### Export Functionality:
 - HTML Download: Complete styled report with CSS embedded
 - Copy to Clipboard: Raw HTML for external use
@@ -2361,6 +2871,172 @@ const handleDayClick = (day: number) => {
 };
 ```
 
+#### SaveButton Integration for Calendar Tools:
+```typescript
+import SaveButton from '../Common/SaveButton';
+
+// Enhanced state management for calendar events
+const [calendarEvents, setCalendarEvents] = useState<any[]>([]);
+
+// MarketingCalendar SaveButton implementation
+{calendarEvents.length > 0 && (
+  <div className="calendar-save-section">
+    <SaveButton
+      content={JSON.stringify({ 
+        calendar: calendarEvents,
+        generatedAt: new Date().toISOString(),
+        totalEvents: calendarEvents.length
+      })}
+      assetType="marketing"
+      defaultTitle={`${calendarEvents.length} Event Marketing Calendar`}
+      metadata={{ 
+        tool: 'marketing-calendar',
+        eventCount: calendarEvents.length,
+        dateRange: getDateRange(calendarEvents),
+        tokenCount: tokenCount
+      }}
+      onSaveSuccess={(savedAsset) => {
+        setMessages(prev => [...prev, {
+          type: 'ai',
+          content: `✅ Calendar saved as "${savedAsset.title}" with ${calendarEvents.length} events`
+        }]);
+      }}
+    />
+  </div>
+)}
+
+// Calendar population event listener for all calendar tools
+useEffect(() => {
+  const handlePopulateCalendarContent = (event: any) => {
+    const { asset } = event.detail;
+    try {
+      const calendarData = JSON.parse(asset.content);
+      if (calendarData.calendar && Array.isArray(calendarData.calendar)) {
+        setCalendarEvents(calendarData.calendar);
+        setMessages(prev => [...prev, {
+          type: 'ai',
+          content: `✅ Loaded saved ${asset.asset_type} calendar: "${asset.title}" with ${calendarData.calendar.length} events`
+        }]);
+      }
+    } catch (error) {
+      console.error('Failed to populate calendar content:', error);
+    }
+  };
+
+  window.addEventListener('populateCalendarContent', handlePopulateCalendarContent);
+  return () => window.removeEventListener('populateCalendarContent', handlePopulateCalendarContent);
+}, []);
+
+// Helper function for date range calculation
+const getDateRange = (events: any[]) => {
+  if (events.length === 0) return '';
+  const dates = events.map(e => e.date).sort();
+  return `${dates[0]} to ${dates[dates.length - 1]}`;
+};
+```
+
+- Tool-Specific Asset Types:
+   - MarketingCalendar.tsx: assetType="marketing", tool: 'marketing-calendar'
+   - SocialCalendar.tsx: assetType="social", tool: 'social-calendar'
+   - EmailCalendar.tsx: assetType="email", tool: 'email-calendar'
+
+#### Calendar Content Structure:
+```typescript
+// Saved calendar asset structure
+{
+  calendar: [
+    {
+      id: string,
+      date: string,           // ISO date format
+      time: string,           // HH:MM format
+      title: string,
+      content: string,
+      contentType: string,    // Tool-specific
+      platform: string,       // Tool-specific
+      status: string
+    }
+  ],
+  generatedAt: string,
+  totalEvents: number
+}
+```
+
+### 6.12 SavedAssets.tsx
+Purpose: Centralized content library for managing and reusing saved content across all tools
+
+- Core Features:
+   - 100-item limit per user with visual counter
+   - Asset filtering by type (8 categories)
+   - Search functionality across titles and content
+   - Preview, reuse, and download capabilities
+   - Statistics dashboard with asset distribution
+
+#### Asset Type System:
+```typescript
+export type AssetType = 
+  | 'marketing' 
+  | 'social' 
+  | 'email' 
+  | 'email-built' 
+  | 'landing' 
+  | 'persona' 
+  | 'content' 
+  | 'ads';
+
+export const ASSET_TYPE_LABELS: Record<AssetType, string> = {
+  'marketing': 'Marketing',
+  'social': 'Social Media',
+  'email': 'Email',
+  'email-built': 'Emails Built',
+  'landing': 'Landing Pages',
+  'persona': 'Personas',
+  'content': 'Content',
+  'ads': 'Ads'
+};
+
+export const TOOL_ASSET_TYPE_MAPPING: Record<string, AssetType> = {
+  'marketing-calendar': 'marketing',
+  'social-calendar': 'social',
+  'email-calendar': 'email',
+  'email-generator': 'email-built',
+  'landing-page-builder': 'landing',
+  'persona-builder': 'persona',
+  'content-creator': 'content',
+  'ads-analysis': 'ads'
+};
+```
+
+#### Filter Categories Implementation:
+```typescript
+const assetCategories = [
+  { id: 'all', name: 'All Assets', count: stats?.total || 0 },
+  { id: 'marketing', name: 'Marketing', count: stats?.byType?.marketing || 0 },
+  { id: 'social', name: 'Social Media', count: stats?.byType?.social || 0 },
+  { id: 'email', name: 'Email', count: stats?.byType?.email || 0 },
+  { id: 'email-built', name: 'Emails Built', count: stats?.byType?.['email-built'] || 0 },
+  { id: 'landing', name: 'Landing Pages', count: stats?.byType?.landing || 0 },
+  { id: 'persona', name: 'Personas', count: stats?.byType?.persona || 0 },
+  { id: 'content', name: 'Content', count: stats?.byType?.content || 0 },
+  { id: 'ads', name: 'Ads', count: stats?.byType?.ads || 0 }
+];
+```
+
+- Asset Reuse Integration:
+   - Email Generator & Landing Page Builder: Preview + Reuse + Download
+   - Calendar Tools: Preview populates content in respective calendar pages
+   - All Other Tools: Preview + Download functionality
+   - Event-driven architecture: Uses reuseSavedAsset and populateCalendarContent events
+
+#### Key State Management:
+```typescript
+const [assets, setAssets] = useState<SavedAsset[]>([]);
+const [filteredAssets, setFilteredAssets] = useState<SavedAsset[]>([]);
+const [selectedCategory, setSelectedCategory] = useState('all');
+const [searchTerm, setSearchTerm] = useState('');
+const [stats, setStats] = useState<SavedAssetStats | null>(null);
+const [loading, setLoading] = useState(true);
+```
+
 ## 7. Conversation Memory System
 ### 7.1 Core Interface
 All AI-integrated components implement this exact conversation pattern:
@@ -2421,8 +3097,100 @@ const getTokenStatus = () => {
 };
 ```
 
-## 8. Modal Implementation
-### 8.1 AddClientModal.tsx
+## 8. Event-Based Communication System
+### 8.1 Saved Asset Reuse Events
+#### Asset Reuse Implementation Pattern:
+```typescript
+// EmailGenerator & LandingPageBuilder reuse pattern
+useEffect(() => {
+  const handleReuseSavedAsset = (event: any) => {
+    const { asset } = event.detail;
+    if (asset.asset_type === 'email' || asset.asset_type === 'email-built') {
+      // Populate content and conversation history
+      setEmailPreview(asset.content);
+      setChatInput(`Reusing saved asset: ${asset.title}`);
+      
+      // Update conversation context
+      const newHistory = [...conversationHistory,
+        { role: 'user', content: `Reuse this saved content: ${asset.title}` },
+        { role: 'assistant', content: asset.content }
+      ];
+      setConversationHistory(newHistory);
+      
+      // Update token count
+      const newTokenCount = apiService.estimateConversationTokens(newHistory);
+      setTokenCount(newTokenCount);
+    }
+  };
+  
+  window.addEventListener('reuseSavedAsset', handleReuseSavedAsset);
+  return () => window.removeEventListener('reuseSavedAsset', handleReuseSavedAsset);
+}, [conversationHistory]);
+```
+
+### 8.2 Calendar Population Events
+#### Calendar Tools Integration Pattern:
+```typescript
+// MarketingCalendar, SocialCalendar, EmailCalendar pattern
+useEffect(() => {
+  const handlePopulateCalendarContent = (event: any) => {
+    const { asset } = event.detail;
+    
+    // Parse saved calendar content and populate state
+    try {
+      const calendarData = JSON.parse(asset.content);
+      if (calendarData.calendar && Array.isArray(calendarData.calendar)) {
+        setCalendarEvents(calendarData.calendar);
+        
+        // Update UI to show populated content
+        setMessages(prev => [...prev, {
+          type: 'ai',
+          content: `✅ Loaded saved ${asset.asset_type} calendar: "${asset.title}" with ${calendarData.calendar.length} events`
+        }]);
+      }
+    } catch (error) {
+      console.error('Failed to populate calendar content:', error);
+      setMessages(prev => [...prev, {
+        type: 'ai',
+        content: `❌ Failed to load saved calendar content`
+      }]);
+    }
+  };
+
+  window.addEventListener('populateCalendarContent', handlePopulateCalendarContent);
+  return () => window.removeEventListener('populateCalendarContent', handlePopulateCalendarContent);
+}, []);
+```
+
+### 8.3 Global Event System Architecture
+#### Event Types and Tool Mapping:
+```typescript
+// Event dispatching from SavedAssets page
+const dispatchAssetReuse = (asset: SavedAsset) => {
+  if (['email', 'email-built', 'landing'].includes(asset.asset_type)) {
+    window.dispatchEvent(new CustomEvent('reuseSavedAsset', { 
+      detail: { asset } 
+    }));
+  } else if (['marketing', 'social', 'email'].includes(asset.asset_type)) {
+    window.dispatchEvent(new CustomEvent('populateCalendarContent', { 
+      detail: { asset } 
+    }));
+  }
+};
+
+// Tool-specific asset type routing
+const ASSET_TOOL_ROUTING = {
+  'email-built': 'email-generator',
+  'email': 'email-generator', 
+  'landing': 'landing-page-builder',
+  'marketing': 'marketing-calendar',
+  'social': 'social-calendar',
+  'email': 'email-calendar'
+};
+```
+
+## 9. Modal Implementation
+### 9.1 AddClientModal.tsx
 Client creation form with sections:
 - Company Information: companyName, industry, website
 - Primary Contact: contactName, contactEmail, phone, contactRole
@@ -2432,7 +3200,7 @@ Client creation form with sections:
 - Budget Options: 0-10k, 10k-50k, 50k-100k, 100k+
 - Goal Options: brand-awareness, lead-generation, sales, engagement, retention
 
-### 8.2 EditModal.tsx
+### 9.2 EditModal.tsx
 Dynamic content editor with calendar-type configurations:
 - Marketing Calendar: Blog posts, infographics, social posts, emails, whitepapers, video scripts, press releases, case studies
 - Social Calendar: Posts, stories, reels, carousels
@@ -2440,7 +3208,7 @@ Dynamic content editor with calendar-type configurations:
 
 Each has platform-specific options and campaign types.
 
-### 8.3 EditPersonaModal.tsx
+### 9.3 EditPersonaModal.tsx
 Pre-populated persona editing form with sections:
 - Basic Information: name, role, age, location
 - Demographics: income, education
@@ -2448,7 +3216,7 @@ Pre-populated persona editing form with sections:
 - Behavioral Traits: techComfort, decisionMaking, communication, workStyle
 - Solutions & Characteristics: solutions, characteristics (textareas)
 
-### 8.4 PreviewModal.tsx
+### 9.4 PreviewModal.tsx
 Asset preview system that:
 - Loads content using assetLoader functions
 - Wraps content differently for email vs landing page
@@ -2461,7 +3229,7 @@ Asset preview system that:
 - Wraps content with proper HTML structure
 - Handles loading states and errors
 
-### 8.5 GuidelinesModal.tsx
+### 9.5 GuidelinesModal.tsx
 Purpose: Comprehensive AI prompting education system
 
 #### Four-Tab Interface:
@@ -2507,8 +3275,95 @@ const copyToClipboard = async (text: string, sectionId: string) => {
 - Landing Page-specific: Responsive design, platform considerations, multi-file output
 - Universal: Color specifications, tracking setup, accessibility guidelines
 
-## 9. Asset System Implementation
-### 9.1 Asset Structure
+### 9.6 Enhanced PreviewModal with Saved Assets Support
+#### Saved Asset Preview Implementation:
+```typescript
+// Enhanced PreviewModal handling for saved assets
+if (data.type === 'saved-asset') {
+  const asset = data.asset;
+  
+  return (
+    <div className="preview-modal-overlay">
+      <div className="preview-modal">
+        <div className="preview-modal-header">
+          <h3 className="preview-modal-title">{asset.title}</h3>
+          <button className="preview-modal-close" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="preview-modal-content">
+          <div className="saved-asset-preview">
+            <div className="asset-header">
+              <div className="asset-info">
+                <span className="asset-type">{ASSET_TYPE_LABELS[asset.asset_type]}</span>
+                <span className="asset-date">{new Date(asset.created_at).toLocaleDateString()}</span>
+              </div>
+            </div>
+            
+            <div className="asset-content">
+              {asset.asset_type === 'landing' || asset.asset_type === 'email-built' ? (
+                <iframe
+                  style={{
+                    width: '100%',
+                    height: '400px',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '8px',
+                    backgroundColor: asset.asset_type === 'email-built' ? '#f5f5f5' : '#ffffff'
+                  }}
+                  srcDoc={content}
+                  title="Saved Asset Preview"
+                  scrolling="yes"
+                />
+              ) : (
+                <pre className="asset-text-content">
+                  {asset.content}
+                </pre>
+              )}
+            </div>
+          </div>
+
+          <div className="preview-modal-actions">
+            <button className="btn btn-secondary" onClick={onClose}>Close</button>
+            
+            {/* Download button for all assets */}
+            <button className="btn btn-secondary" onClick={() => handleDownloadAsset(asset)}>
+              <Download size={16} />
+              Download
+            </button>
+            
+            {/* Reuse button for compatible assets */}
+            {['email', 'email-built', 'landing'].includes(asset.asset_type) && (
+              <button className="btn btn-primary" onClick={handleUse}>
+                <RotateCcw size={16} />
+                Reuse in Tool
+              </button>
+            )}
+            
+            {/* Calendar populate button for calendar assets */}
+            {['marketing', 'social', 'email'].includes(asset.asset_type) && (
+              <button className="btn btn-primary" onClick={handleUse}>
+                <Calendar size={16} />
+                Load in Calendar
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+- Asset Type Specific Handling:
+   - HTML Assets (email-built, landing): Rendered in iframe with proper styling
+   - Text Assets (persona, content, ads): Displayed in formatted pre-element
+   - Calendar Assets (marketing, social, email): JSON structure with event parsing
+   - Download Support: All asset types with appropriate file extensions
+   - Reuse Integration: Tool-specific navigation and content population
+
+## 10. Asset System Implementation
+### 10.1 Asset Structure
 <pre>public/assets/generator-assets/
 ├── email/
 │   ├── templates/
@@ -2544,7 +3399,7 @@ const copyToClipboard = async (text: string, sectionId: string) => {
         ├── minimal/
         └── product-showcase/</pre>
         
-### 9.2 Index Files Structure
+### 10.2 Index Files Structure
 #### Email Templates (src/assets/generator-assets/email/templates/index.js):
 ```javascript
 import announcement01 from './announcement/announcement-01/metadata.json';
@@ -2573,7 +3428,7 @@ export const emailTemplateCount = emailTemplates.length;
 #### Landing Page Wireframes (src/assets/generator-assets/landing-page/wireframes/index.js):
 **10 wireframes** with categories: agency, app, ecommerce, saas, startup
 
-### 9.3 Existing Template Example
+### 10.3 Existing Template Example
 #### announcement-01 metadata.json:
 ```json
 {
@@ -2597,7 +3452,7 @@ export const emailTemplateCount = emailTemplates.length;
 }
 ```
 
-### 9.3 Preview Image Handling
+### 10.3 Preview Image Handling
 #### Implementation in components:
 ```typescript
 const getTemplatePreviewImage = (template: any) => {
@@ -2653,7 +3508,7 @@ const TemplatePreview: React.FC<{ template: any }> = ({ template }) => {
 };
 ```
 
-### 9.4 Template Usage System
+### 10.4 Template Usage System
 #### Template and Wireframe Integration:
 ```typescript
 // Global event system for template/wireframe usage
@@ -2688,8 +3543,8 @@ const filteredTemplates = templateFilter === 'all'
   : templates.filter((t: any) => t.category === templateFilter);
 ```
 
-## 10. API Integration Patterns
-### 10.1 Standardized API Call Pattern
+## 11. API Integration Patterns
+### 11.1 Standardized API Call Pattern
 #### Used across all AI-integrated components:
 ```typescript
 const callClaude = async (conversationHistory: ConversationMessage[]) => {
@@ -2713,7 +3568,7 @@ const callClaude = async (conversationHistory: ConversationMessage[]) => {
 };
 ```
 
-### 10.2 Component-Specific Prompt Building
+### 11.2 Component-Specific Prompt Building
 #### EmailGenerator Prompt Structure:
 ```typescript
 if (templateMode && currentTemplateHTML) {
@@ -2832,7 +3687,7 @@ fullPrompt += `\nIMPORTANT SOCIAL MEDIA CALENDAR REQUIREMENTS:
 Make sure each post is tailored to the specific platform's format, character limits, and audience behavior.`;
 ```
 
-### 10.3 Response Parsing Implementations
+### 11.3 Response Parsing Implementations
 #### EmailGenerator HTML Parsing:
 ```typescript
 const parseEmailResponse = (aiResponse: string) => {
@@ -2896,7 +3751,7 @@ const extractSectionItems = (sectionName: string) => {
 };
 ```
 
-### 10.4 Error Handling Pattern
+### 11.4 Error Handling Pattern
 #### Standardized across all components:
 ```typescript
 try {
@@ -2930,8 +3785,8 @@ try {
 }
 ```
 
-## 11. UI Patterns & Styling
-### 11.1 CSS Variables System (App.css)
+## 12. UI Patterns & Styling
+### 12.1 CSS Variables System (App.css)
 #### Dark Theme (Default):
 ```css
 :root {
@@ -2987,7 +3842,7 @@ body.light-theme {
 }
 ```
 
-### 11.2 Sidebar-Specific Styling (Sidebar.css)
+### 12.2 Sidebar-Specific Styling (Sidebar.css)
 Always-dark styling regardless of theme:
 ```css
 .sidebar {
@@ -2999,7 +3854,7 @@ Always-dark styling regardless of theme:
 }
 ```
 
-### 11.3 Responsive Design
+### 12.3 Responsive Design
 ```css
 @media (max-width: 768px) {
   .sidebar {
@@ -3020,7 +3875,7 @@ Always-dark styling regardless of theme:
 }
 ```
 
-### 11.4 Layout Patterns
+### 12.4 Layout Patterns
 #### Two-Column Layout (Calendar Components):
 ```typescript
 <div className="calendar-layout">
@@ -3064,7 +3919,7 @@ Dashboard Grid System:
 </div>
 ```
 
-### 11.5 Component Styling Patterns
+### 12.5 Component Styling Patterns
 #### Card Structure:
 ```typescript
 <div className="card">
@@ -3097,7 +3952,7 @@ Dashboard Grid System:
 </div>
 ```
 
-### 11.6 Tab System Implementation
+### 12.6 Tab System Implementation
 #### Used in EmailGenerator, LandingPageBuilder, PersonaBuilder:
 ```typescript
 // Navigation
@@ -3124,7 +3979,7 @@ Dashboard Grid System:
 )}
 ```
 
-### 11.7 Preview Toggle Implementation
+### 12.7 Preview Toggle Implementation
 #### Mobile/Desktop Preview Pattern:
 ```typescript
 <div className="preview-toggle">
@@ -3145,7 +4000,7 @@ Dashboard Grid System:
 </div>
 ```
 
-### 11.8 Chat Interface Pattern
+### 12.8 Chat Interface Pattern
 #### Standardized across AI components:
 ```typescript
 <div className="chat-messages">
@@ -3175,8 +4030,8 @@ Dashboard Grid System:
 </div>
 ```
 
-## 12. State Management Implementation
-### 12.1 localStorage Usage
+## 13. State Management Implementation
+### 13.1 localStorage Usage
 #### Theme Persistence (App.tsx):
 ```typescript
 useEffect(() => {
@@ -3220,7 +4075,7 @@ if (savedProfile) {
 }
 ```
 
-### 12.2 Authentication State Management
+### 13.2 Authentication State Management
 #### User Session Persistence (App.tsx):
 ```typescript
 const [user, setUser] = useState<User | null>(null);
@@ -3257,7 +4112,7 @@ useEffect(() => {
 }, []);
 ```
 
-### 12.3 Modal State Pattern
+### 13.3 Modal State Pattern
 #### Centralized Modal Management (App.tsx):
 ```typescript
 const openEditModal = (data = null) => {
@@ -3273,7 +4128,7 @@ const closeEditModal = () => {
 };
 ```
 
-### 12.4 Component Communication Patterns
+### 13.4 Component Communication Patterns
 #### Modal Integration:
 ```typescript
 // Props passed to components
@@ -3357,7 +4212,138 @@ useEffect(() => {
 }, []);
 ```
 
-### 12.5 State Persistence Patterns
+### 13.5 Saved Assets State Management
+#### SavedAssets Page State Pattern:
+```typescript
+// Core state management for saved assets
+const [assets, setAssets] = useState<SavedAsset[]>([]);
+const [filteredAssets, setFilteredAssets] = useState<SavedAsset[]>([]);
+const [selectedCategory, setSelectedCategory] = useState('all');
+const [searchTerm, setSearchTerm] = useState('');
+const [stats, setStats] = useState<SavedAssetStats | null>(null);
+const [loading, setLoading] = useState(true);
+const [error, setError] = useState<string | null>(null);
+
+// Pagination state
+const [currentPage, setCurrentPage] = useState(1);
+const [hasMore, setHasMore] = useState(true);
+const ITEMS_PER_PAGE = 12;
+```
+
+#### SaveButton Component State Pattern:
+```typescript
+// Individual SaveButton state management
+const [isOpen, setIsOpen] = useState(false);
+const [title, setTitle] = useState(defaultTitle);
+const [saving, setSaving] = useState(false);
+const [error, setError] = useState<string | null>(null);
+
+// Save operation flow
+const handleSave = async () => {
+  setSaving(true);
+  setError(null);
+  
+  try {
+    const response = await apiService.createSavedAsset({
+      assetType,
+      title: title.trim(),
+      content,
+      metadata
+    });
+    
+    if (response.success) {
+      onSaveSuccess?.(response.data);
+      setIsOpen(false);
+      setTitle(defaultTitle);
+    }
+  } catch (error: any) {
+    setError(error.message);
+    onSaveError?.(error.message);
+  } finally {
+    setSaving(false);
+  }
+};
+```
+
+#### Asset Reuse Event Management:
+```typescript
+// Global asset reuse state synchronization
+const dispatchAssetReuse = (asset: SavedAsset) => {
+  // Route to appropriate tool based on asset type
+  const toolMapping = {
+    'email-built': 'email-generator',
+    'email': 'email-generator',
+    'landing': 'landing-page-builder',
+    'marketing': 'marketing-calendar',
+    'social': 'social-calendar',
+    'email': 'email-calendar'
+  };
+  
+  const targetTool = toolMapping[asset.asset_type];
+  if (targetTool) {
+    // Navigate to tool
+    setActivePage(targetTool);
+    
+    // Dispatch appropriate reuse event
+    setTimeout(() => {
+      if (['email-built', 'email', 'landing'].includes(asset.asset_type)) {
+        window.dispatchEvent(new CustomEvent('reuseSavedAsset', { 
+          detail: { asset } 
+        }));
+      } else if (['marketing', 'social', 'email'].includes(asset.asset_type)) {
+        window.dispatchEvent(new CustomEvent('populateCalendarContent', { 
+          detail: { asset } 
+        }));
+      }
+    }, 100);
+  }
+};
+```
+
+#### Filter and Search State Management:
+```typescript
+// Real-time filtering logic
+useEffect(() => {
+  let filtered = assets;
+  
+  // Apply category filter
+  if (selectedCategory !== 'all') {
+    filtered = filtered.filter(asset => asset.asset_type === selectedCategory);
+  }
+  
+  // Apply search filter
+  if (searchTerm.trim()) {
+    const searchLower = searchTerm.toLowerCase();
+    filtered = filtered.filter(asset => 
+      asset.title.toLowerCase().includes(searchLower) ||
+      asset.content.toLowerCase().includes(searchLower)
+    );
+  }
+  
+  setFilteredAssets(filtered);
+  setCurrentPage(1); // Reset pagination on filter change
+}, [assets, selectedCategory, searchTerm]);
+```
+
+#### Asset Limit State Management:
+```typescript
+// 100-item limit enforcement
+const [assetCount, setAssetCount] = useState(0);
+const [isAtLimit, setIsAtLimit] = useState(false);
+const ASSET_LIMIT = 100;
+
+useEffect(() => {
+  setIsAtLimit(assetCount >= ASSET_LIMIT);
+}, [assetCount]);
+
+// Show limit warning in SaveButton
+const canSave = !isAtLimit && content.trim().length > 0;
+const limitMessage = isAtLimit ? 
+  `You've reached the limit of ${ASSET_LIMIT} saved assets. Please delete some assets to save new ones.` : 
+  null;
+```
+
+### 13.6 State Persistence Patterns
 #### Calendar Events (SocialCalendar.tsx):
 ```typescript
 // Store events globally for export service
@@ -3383,8 +4369,8 @@ const finalConversationHistory: ConversationMessage[] = [
 setConversationHistory(finalConversationHistory);
 ```
 
-## 13. Export & Download System
-### 13.1 DownloadButton Component
+## 14. Export & Download System
+### 14.1 DownloadButton Component
 Location: src/components/Common/DownloadButton.tsx
 #### Usage Pattern:
 ```typescript
@@ -3393,7 +4379,7 @@ Location: src/components/Common/DownloadButton.tsx
 <DownloadButton type="personas" />
 ```
 
-### 13.2 Content Download Implementation
+### 14.2 Content Download Implementation
 #### Email Code Download (EmailGenerator.tsx):
 ```typescript
 const downloadEmailCode = () => {
@@ -3452,7 +4438,7 @@ const downloadLandingPageCode = () => {
 };
 ```
 
-### 13.3 Copy to Clipboard Implementation
+### 14.3 Copy to Clipboard Implementation
 #### Used across ContentCreator, EmailGenerator, LandingPageBuilder, PromptLibrary:
 ```typescript
 const copyToClipboard = async (content: string) => {
@@ -3484,7 +4470,7 @@ const copyToClipboard = async (promptId: string, content: string) => {
 };
 ```
 
-### 13.4 External Preview Implementation
+### 14.4 External Preview Implementation
 #### LandingPageBuilder Open in New Tab:
 ```typescript
 const openInNewTab = () => {
@@ -3501,7 +4487,7 @@ const openInNewTab = () => {
 };
 ```
 
-### 13.5 Export Service Integration
+### 14.5 Export Service Integration
 #### Placeholder implementations referencing exportService.ts:
 ```typescript
 // ContentCreator.tsx
@@ -3524,8 +4510,178 @@ const downloadContentWord = () => {
 };
 ```
 
-## 14. Development Patterns
-### 14.1 Error Handling Pattern (assetLoader.js)
+### 14.6 Saved Assets Download System
+#### Asset-Specific Download Implementation:
+```typescript
+// SavedAssets.tsx download functionality
+const handleDownloadAsset = (asset: SavedAsset) => {
+  const blob = new Blob([asset.content], { 
+    type: getContentType(asset.asset_type) 
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = getFileName(asset);
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+// Content type mapping for different asset types
+const getContentType = (assetType: AssetType): string => {
+  const contentTypes = {
+    'email-built': 'text/html',
+    'landing': 'text/html',
+    'persona': 'application/json',
+    'content': 'text/plain',
+    'ads': 'text/html',
+    'marketing': 'application/json',
+    'social': 'application/json',
+    'email': 'application/json'
+  };
+  return contentTypes[assetType] || 'text/plain';
+};
+
+// File name generation with appropriate extensions
+const getFileName = (asset: SavedAsset): string => {
+  const sanitizedTitle = asset.title.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+  const extensions = {
+    'email-built': '.html',
+    'landing': '.html',
+    'persona': '.json',
+    'content': '.txt',
+    'ads': '.html',
+    'marketing': '.json',
+    'social': '.json',
+    'email': '.json'
+  };
+  
+  const extension = extensions[asset.asset_type] || '.txt';
+  return `${sanitizedTitle}${extension}`;
+};
+```
+
+#### Enhanced PreviewModal Download Integration:
+```typescript
+// PreviewModal.tsx enhanced download handling
+const handleDownloadAsset = (asset: SavedAsset) => {
+  try {
+    let downloadContent = asset.content;
+    let fileName = getFileName(asset);
+    
+    // Special handling for HTML assets
+    if (asset.asset_type === 'email-built') {
+      downloadContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${asset.title}</title>
+</head>
+<body style="margin: 0; padding: 20px; background-color: #f5f5f5; font-family: Arial, sans-serif;">
+    <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+        ${asset.content}
+    </div>
+</body>
+</html>`;
+    } else if (asset.asset_type === 'landing') {
+      // Check if it's multi-file content
+      try {
+        const parsedContent = JSON.parse(asset.content);
+        if (typeof parsedContent === 'object' && Object.keys(parsedContent).length > 1) {
+          // Multi-file download as ZIP
+          downloadAsZip(asset, parsedContent);
+          return;
+        }
+      } catch {
+        // Single file content
+      }
+    }
+    
+    // Standard single-file download
+    const blob = new Blob([downloadContent], { 
+      type: getContentType(asset.asset_type) 
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+  } catch (error) {
+    console.error('Download failed:', error);
+    alert('Failed to download asset. Please try again.');
+  }
+};
+
+// Multi-file ZIP download for landing pages
+const downloadAsZip = async (asset: SavedAsset, multiFileContent: Record<string, string>) => {
+  const JSZip = (await import('jszip')).default;
+  const { saveAs } = await import('file-saver');
+  
+  const zip = new JSZip();
+  
+  Object.entries(multiFileContent).forEach(([filename, content]) => {
+    if (filename.includes('/')) {
+      const parts = filename.split('/');
+      const folder = parts.slice(0, -1).join('/');
+      const file = parts[parts.length - 1];
+      zip.folder(folder)?.file(file, content);
+    } else {
+      zip.file(filename, content);
+    }
+  });
+  
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const sanitizedTitle = asset.title.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+  saveAs(blob, `${sanitizedTitle}-project.zip`);
+};
+```
+
+#### Bulk Export Functionality:
+```typescript
+// SavedAssets.tsx bulk export options
+const exportSelectedAssets = async (selectedAssets: SavedAsset[]) => {
+  if (selectedAssets.length === 0) {
+    alert('Please select assets to export');
+    return;
+  }
+  
+  if (selectedAssets.length === 1) {
+    handleDownloadAsset(selectedAssets[0]);
+    return;
+  }
+  
+  // Multiple assets - create ZIP
+  const JSZip = (await import('jszip')).default;
+  const { saveAs } = await import('file-saver');
+  
+  const zip = new JSZip();
+  
+  selectedAssets.forEach((asset, index) => {
+    const fileName = getFileName(asset);
+    const folder = ASSET_TYPE_LABELS[asset.asset_type];
+    zip.folder(folder)?.file(fileName, asset.content);
+  });
+  
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const timestamp = new Date().toISOString().split('T')[0];
+  saveAs(blob, `saved-assets-export-${timestamp}.zip`);
+};
+```
+
+- Integration with Existing Export Service:
+   - Calendar Assets: Use existing exportCalendarPDF and exportCalendarExcel methods
+   - Content Assets: Integrate with exportContentPDF functionality
+   - Persona Assets: Use existing exportPersonasPDF method
+   - Custom Downloads: Direct file download for HTML and analysis reports
+
+## 15. Development Patterns
+### 15.1 Error Handling Pattern (assetLoader.js)
 ```javascript
 try {
   const { emailTemplates } = await import('../assets/generator-assets/email/templates/index.js');
@@ -3536,7 +4692,7 @@ try {
 }
 ```
 
-### 14.2 API Error Handling (apiService.ts)
+### 15.2 API Error Handling (apiService.ts)
 typescript
 ```try {
   const response = await fetch(`http://localhost:3001/api/${endpoint}`, {
@@ -3556,7 +4712,7 @@ typescript
 }
 ```
 
-### 14.3 Authentication Error Handling Pattern
+### 15.3 Authentication Error Handling Pattern
 #### Used across authentication-integrated components:
 ```typescript
 try {
@@ -3588,27 +4744,27 @@ window.addEventListener('authError', () => {
 });
 ```
 
-### 14.4 Component Props Pattern
+### 15.4 Component Props Pattern
 All components use TypeScript interfaces for props with proper typing.
 
-### 14.5 Import/Export Pattern
+### 15.5 Import/Export Pattern
 - Components: Default exports with named interface exports
 - Services: Named exports with singleton instances (apiService)
 - Utilities: Named exports for functions
 
-### 14.6 Browser Compatibility
+### 15.6 Browser Compatibility
 - Uses modern JavaScript features (async/await, optional chaining)
 - Clipboard API for copy functionality
 - Natural language image URL integration
 - CSS Grid and Flexbox for layouts
 
-### 14.7 Performance Considerations
+### 15.7 Performance Considerations
 - Lazy loading of assets through assetLoader service
 - Conversation history kept in memory (not persisted)
 - Image error handling with fallback displays
 - Efficient re-rendering with proper React keys
 
-### 14.8 Security Considerations
+### 15.8 Security Considerations
 - API keys stored in localStorage (client-side only)
 - No sensitive data sent to client components
 - File upload validation (image types, size limits)
@@ -3639,20 +4795,20 @@ clearAuthData(): void {
 }
 ```
 
-### 14.9 TypeScript Usage
+### 15.9 TypeScript Usage
 - Interface definitions for all major data structures
 - Proper typing for event handlers and props
 - Type-safe state management patterns
 - Generic typing for reusable components
 
-### 14.10 Error Handling Strategy
+### 15.10 Error Handling Strategy
 - Graceful degradation for missing assets
 - Network error handling with user feedback
 - Fallback parsing for AI responses
 - Input validation and boundary checking
 
-## 15. Enhanced Authentication System
-### 15.1 Authentication Architecture
+## 16. Enhanced Authentication System
+### 16.1 Authentication Architecture
 The application now features a comprehensive authentication system with:
 - Email verification with 6-digit codes sent from akddme@gmail.com
 - Password reset functionality with secure code verification
@@ -3660,7 +4816,7 @@ The application now features a comprehensive authentication system with:
 - Session management with automatic token handling
 - Real-time email verification status tracking
 
-### 15.2 Authentication Flow States
+### 16.2 Authentication Flow States
 ```typescript
 type AuthMode = 'login' | 'signup' | 'verification' | 'forgot-password' | 'reset-password';
 
@@ -3675,7 +4831,7 @@ interface SignupData {
 }
 ```
 
-### 15.3 Enhanced User Data Structure
+### 16.3 Enhanced User Data Structure
 ```typescript
 interface User {
   id: number;
@@ -3696,13 +4852,13 @@ interface UserProfileSummary {
 }
 ```
 
-### 15.4 Session Management Integration
+### 16.4 Session Management Integration
 - Automatic session restoration on app startup
 - Token-based authentication with backend API integration
 - Global authentication error handling with automatic logout
 - Enhanced user display with profile completion tracking
 
-### 15.5 Critical Authentication Fixes
+### 16.5 Critical Authentication Fixes
 #### Token Storage Resolution:
 The application now properly handles authentication token storage across all authentication flows:
 
@@ -3726,8 +4882,8 @@ These critical fixes resolved all 401 Unauthorized errors and password reset val
 - **Authorization Context**: All authenticated requests include proper Bearer token headers
 - **State Isolation**: Clean state transitions prevent authentication data leakage between modes
   
-## 16. Email Verification & Password Reset
-### 16.1 Email Verification System
+## 17. Email Verification & Password Reset
+### 17.1 Email Verification System
 #### 6-Digit Code Verification:
 ```typescript
 // Email verification input with auto-formatting
@@ -3761,7 +4917,7 @@ These critical fixes resolved all 401 Unauthorized errors and password reset val
 )}
 ```
 
-### 16.2 Password Reset Flow
+### 17.2 Password Reset Flow
 #### Reset Code Verification:
 ```typescript
 // Password reset with 6-digit code
@@ -3786,14 +4942,14 @@ These critical fixes resolved all 401 Unauthorized errors and password reset val
 )}
 ```
           
-### 16.3 Email Service Integration
+### 17.3 Email Service Integration
 - Emails sent from akddme@gmail.com
 - 6-digit verification codes for both email verification and password reset
 - Automatic code expiration and resend functionality
 - Professional email templates with MarAI branding
 
-## 17. Enhanced User Profile Management
-### 17.1 Extended Profile Fields
+## 18. Enhanced User Profile Management
+### 18.1 Extended Profile Fields
 #### Registration Profile Fields:
 ```typescript
 // Enhanced registration form with profile fields
@@ -3828,7 +4984,7 @@ These critical fixes resolved all 401 Unauthorized errors and password reset val
 </div>
 ```
 
-### 17.2 Profile Completion Tracking
+### 18.2 Profile Completion Tracking
 #### Visual Progress Indicators:
 ```typescript
 // Profile completion progress bar
@@ -3848,7 +5004,7 @@ These critical fixes resolved all 401 Unauthorized errors and password reset val
 )}
 ```
 
-### 17.3 Backend Profile Synchronization
+### 18.3 Backend Profile Synchronization
 #### Profile Update Integration:
 ```typescript
 // Save profile to backend with validation
@@ -3869,14 +5025,244 @@ const saveProfile = async () => {
 };
 ```
 
-### 17.4 Enhanced User Display
+### 18.4 Enhanced User Display
 - Dynamic display name generation from profile fields
 - Smart avatar initials using firstName/lastName
 - Profile completion percentage in header dropdown
 - Country selection with comprehensive country list
 
-## 18. Authentication UI Components
-### 18.1 Dynamic Authentication Titles
+## 19. Saved Assets System Implementation                     
+### 19.1 System Architecture Overview
+The Saved Assets System provides a centralized content library allowing users to save, manage, and reuse generated content across all 8 marketing tools with a 100-item limit per user.
+
+#### Core Components:
+- **Backend**: RESTful API with authentication, database model, 100-item limit enforcement
+- **Frontend**: SavedAssets page, SaveButton component, event-based reuse system
+- **Integration**: Cross-tool compatibility with all marketing generators
+
+#### Database Schema:
+```sql
+CREATE TABLE saved_assets (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  asset_type VARCHAR(20) NOT NULL CHECK (asset_type IN (
+    'marketing', 'social', 'email', 'email-built', 
+    'landing', 'persona', 'content', 'ads'
+  )),
+  title VARCHAR(255) NOT NULL,
+  content TEXT NOT NULL,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 100-item limit enforcement trigger
+CREATE OR REPLACE FUNCTION enforce_asset_limit()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF (SELECT COUNT(*) FROM saved_assets WHERE user_id = NEW.user_id) >= 100 THEN
+    RAISE EXCEPTION 'User has reached the maximum limit of 100 saved assets';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER asset_limit_trigger
+  BEFORE INSERT ON saved_assets
+  FOR EACH ROW EXECUTE FUNCTION enforce_asset_limit();
+```
+
+### 19.2 Asset Type System
+#### Asset Type Definitions:
+```typescript
+export type AssetType = 
+  | 'marketing'     // Marketing Calendar events
+  | 'social'        // Social Media Calendar events  
+  | 'email'         // Email Calendar events
+  | 'email-built'   // Generated emails from Email Generator
+  | 'landing'       // Landing pages (single/multi-file)
+  | 'persona'       // Customer personas
+  | 'content'       // Content Creator outputs
+  | 'ads';          // Ads Analysis reports
+
+export const TOOL_ASSET_TYPE_MAPPING: Record<string, AssetType> = {
+  'marketing-calendar': 'marketing',
+  'social-calendar': 'social', 
+  'email-calendar': 'email',
+  'email-generator': 'email-built',
+  'landing-page-builder': 'landing',
+  'persona-builder': 'persona',
+  'content-creator': 'content',
+  'ads-analysis': 'ads'
+};
+```
+
+### 19.3 SaveButton Component Architecture
+#### Universal Save Interface:
+```typescript
+interface SaveButtonProps {
+  content: string;                    // Generated content to save
+  assetType: AssetType;              // Tool-specific asset type
+  defaultTitle: string;              // Auto-generated title
+  metadata?: Record<string, any>;    // Tool-specific metadata
+  onSaveSuccess?: (asset: SavedAsset) => void;
+  onSaveError?: (error: string) => void;
+  className?: string;
+  disabled?: boolean;
+}
+```
+
+#### Tool Integration Pattern:
+```typescript
+// Standard SaveButton integration across all tools
+<SaveButton
+  content={generatedContent}
+  assetType={TOOL_ASSET_TYPE_MAPPING[toolName]}
+  defaultTitle={generateTitle(content, context)}
+  metadata={{
+    tool: toolName,
+    platform: selectedPlatform,
+    generatedAt: new Date().toISOString(),
+    conversationLength: conversationHistory.length,
+    tokenCount: tokenCount
+  }}
+  onSaveSuccess={(savedAsset) => {
+    // Tool-specific success handling
+    setMessages(prev => [...prev, {
+      type: 'ai',
+      content: `✅ Content saved as "${savedAsset.title}"`
+    }]);
+  }}
+/>
+```
+
+### 19.4 Event-Driven Reuse System
+#### Asset Reuse Events:
+```typescript
+// Primary reuse event for content tools
+window.addEventListener('reuseSavedAsset', (event: any) => {
+  const { asset } = event.detail;
+  // Populate content, update conversation history, preserve context
+});
+
+// Calendar population event for calendar tools  
+window.addEventListener('populateCalendarContent', (event: any) => {
+  const { asset } = event.detail;
+  // Parse calendar JSON, populate events, update UI
+});
+```
+
+#### Tool Navigation and Integration:
+```typescript
+// Auto-navigation based on asset type
+const ASSET_TOOL_ROUTING = {
+  'email-built': 'email-generator',
+  'email': 'email-generator',
+  'landing': 'landing-page-builder', 
+  'marketing': 'marketing-calendar',
+  'social': 'social-calendar',
+  'email': 'email-calendar'
+};
+
+// Dispatch reuse with navigation
+const reuseAsset = (asset: SavedAsset) => {
+  const targetTool = ASSET_TOOL_ROUTING[asset.asset_type];
+  setActivePage(targetTool);
+  
+  setTimeout(() => {
+    const eventType = ['email-built', 'email', 'landing'].includes(asset.asset_type) 
+      ? 'reuseSavedAsset' 
+      : 'populateCalendarContent';
+    window.dispatchEvent(new CustomEvent(eventType, { detail: { asset } }));
+  }, 100);
+};
+```
+
+### 19.5 Business Logic Implementation
+#### 100-Item Limit Enforcement:
+- Database Level: Trigger prevents insertion beyond 100 items
+- Frontend Level: SaveButton disabled when limit reached
+- User Feedback: Clear messaging about limit status
+- Limit Display: Visual counter showing "X/100 saved" in UI
+
+#### Content Handling Strategy:
+- HTML Content: Email-built and landing page assets stored as HTML
+- JSON Content: Calendar events and persona data stored as structured JSON
+- Text Content: General content stored as plain text
+- Multi-File Content: Landing pages support JSON object with filename mapping
+
+#### Search and Filter Logic:
+```typescript
+// Real-time search across title and content
+const searchAssets = (assets: SavedAsset[], searchTerm: string) => {
+  if (!searchTerm.trim()) return assets;
+  
+  const searchLower = searchTerm.toLowerCase();
+  return assets.filter(asset => 
+    asset.title.toLowerCase().includes(searchLower) ||
+    asset.content.toLowerCase().includes(searchLower)
+  );
+};
+
+// Category filtering with asset counts
+const filterByCategory = (assets: SavedAsset[], category: string) => {
+  return category === 'all' 
+    ? assets 
+    : assets.filter(asset => asset.asset_type === category);
+};
+```
+
+### 19.6 Tool-Specific Integration Details
+#### EmailGenerator Integration:
+- Save: HTML email content with template mode context
+- Reuse: Populates email preview and conversation history
+- Metadata: Template mode, platform, conversation length
+
+#### LandingPageBuilder Integration:
+- Save: Single HTML or multi-file JSON content
+- Reuse: Auto-detects and restores appropriate content mode
+- Metadata: Platform, multi-file status, conversation context
+
+#### Calendar Tools Integration:
+- Save: JSON structure with calendar events array
+- Reuse: Populates calendar state with saved events
+- Metadata: Event count, date range, tool-specific properties
+
+#### PersonaBuilder Integration:
+- Save: JSON persona object with structured data
+- Cleanup: Removed legacy local persona storage system
+- Metadata: Generation context and token usage
+
+### 19.7 Performance and Security
+#### Performance Optimizations:
+- Lazy Loading: Assets loaded on-demand with pagination
+- Debounced Search: Reduces API calls during search typing
+- Efficient Filtering: Client-side filtering without re-fetching
+- Memory Management: Proper cleanup of event listeners
+
+#### Security Features:
+- User Scoping: Users can only access their own assets
+- Authentication: All API endpoints require valid user session
+- Input Sanitization: Asset titles and content validated
+- SQL Injection Prevention: Parameterized queries throughout
+
+### 19.8 Success Metrics and Usage Analytics
+#### Key Performance Indicators:
+- Adoption Rate: Percentage of users utilizing saved assets
+- Reuse Frequency: How often saved assets are reused across tools
+- Storage Efficiency: Reduction in token consumption through reuse
+- Tool Integration: Which tools benefit most from asset reuse
+
+#### User Experience Metrics:
+- Save Success Rate: Percentage of successful save operations
+- Search Effectiveness: Time to find and reuse saved content
+- Cross-Tool Usage: Assets saved in one tool and used in another
+- Limit Management: User behavior approaching 100-item limit
+
+This comprehensive implementation enables efficient content management across the entire MarAI platform while maintaining system performance and user experience standards.
+
+## 20. Authentication UI Components
+### 20.1 Dynamic Authentication Titles
 #### Context-Aware UI Text:
 ```typescript
 const getTitle = () => {
@@ -3902,7 +5288,7 @@ const getSubtitle = () => {
 };
 ```
 
-### 18.2 Enhanced Header Integration
+### 20.2 Enhanced Header Integration
 #### Settings Navigation Menu:
 ```typescript
 // Navigation Items in user dropdown
@@ -3934,14 +5320,14 @@ const getSubtitle = () => {
 )}
 ```
 
-### 18.3 Country Selection Support
+### 20.3 Country Selection Support
 #### Comprehensive Country List:
 - 195+ countries in alphabetical order
 - Integrated in both registration and settings
 - Optional field with user-friendly placeholder
 - Form validation and error handling
 
-### 18.4 Enhanced Error Handling
+### 20.4 Enhanced Error Handling
 #### Authentication-Specific Error Messages:
 ```typescript
 const handleApiError = (error: any): string => {
@@ -3958,37 +5344,37 @@ const handleApiError = (error: any): string => {
 };
 ```
 
-### 18.5 Backward Compatibility
+### 20.5 Backward Compatibility
 All enhanced authentication features maintain full compatibility with existing MarAI functionality:
 - AI generation tools continue to work seamlessly
 - Existing localStorage patterns preserved
 - Client management system unchanged
 - All modal and component interactions maintained
 
-## 19. Key Implementation Notes
-### 19.1 File System Integration
+## 21. Key Implementation Notes
+### 21.1 File System Integration
 The application references window.fs.readFile API but this appears to be a custom implementation not standard browser File API.
 
-### 19.2 Asset Loading Strategy
+### 21.2 Asset Loading Strategy
 - Templates and wireframes are loaded dynamically from index.js files
 - HTML content is fetched via HTTP requests
 - Graceful degradation for missing files
 - Error handling with user-friendly messages
 
-### 19.3 Conversation Context Management
+### 21.3 Conversation Context Management
 - 50k token limit enforced across all AI components
 - Visual indicators for session status
 - Automatic session reset functionality
 - Context preservation across multiple interactions
 
-### 19.4 Platform-Specific Features
+### 21.4 Platform-Specific Features
 - Email generator focuses on email-client compatibility with GuidelinesModal education
 - Landing page builder supports multiple frameworks with multi-file ZIP output
 - Social calendar includes platform-specific optimizations
 - Content creator supports universal content types
 - Ads analysis provides data intelligence with Excel/CSV processing
 
-### 19.5 Authentication System Integration
+### 21.5 Authentication System Integration
 #### Session Management Strategy:
 - Opaque token-based authentication with server-side validation
 - Automatic session initialization on app startup with loading states
@@ -4007,7 +5393,7 @@ The application references window.fs.readFile API but this appears to be a custo
 - User context availability for enhanced AI features when authenticated
 - Backward compatibility maintained for all existing functionality
   
-### 19.6 New Capabilities Added
+### 21.6 New Capabilities Added
 - **GuidelinesModal**: Comprehensive AI prompting education system with 4-tab interface
 - **AdsAnalysis**: Professional data analysis with Excel processing and HTML reports
 - **Multi-File Landing Pages**: ZIP packaging with platform-specific code separation
