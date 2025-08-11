@@ -30,15 +30,18 @@
     │       003_add_user_profile_fields.sql
     │       004_create_email_verifications_table.sql
     │       005_create_password_resets_table.sql
+    │       006_create_saved_assets_table.sql
     │
     ├───models
     │       EmailVerification.ts
+    │       SavedAsset.ts
     │       Token.ts
     │       User.ts
     │
     ├───routes
     │       auth.ts
     │       generate.ts
+    │       savedAssets.ts
     │       validate.ts
     │
     ├───services
@@ -545,6 +548,7 @@ import { dbManager } from './config/database';
 import generateRoutes from './routes/generate';
 import validateRoutes from './routes/validate';
 import authRoutes from './routes/auth';
+import savedAssetsRoutes from './routes/savedAssets';
 
 // Load environment variables
 dotenv.config();
@@ -586,17 +590,19 @@ app.get('/health', async (req, res) => {
         stats: dbHealth.stats
       },
       features: {
-        userAuthentication: true,
-        conversationSupport: true,
-        rateLimiting: true,
-        cors: true,
-        security: true
-      },
-      endpoints: {
-        auth: '/api/auth/*',
-        generate: '/api/generate',
-        validate: '/api/validate'
-      }
+  userAuthentication: true,
+  savedAssets: true,
+  conversationSupport: true,
+  rateLimiting: true,
+  cors: true,
+  security: true
+},
+endpoints: {
+  auth: '/api/auth/*',
+  savedAssets: '/api/saved-assets/*',
+  generate: '/api/generate',
+  validate: '/api/validate'
+}
     };
     
     res.json(healthCheck);
@@ -610,7 +616,8 @@ app.get('/health', async (req, res) => {
 });
 
 // API routes
-app.use('/api/auth', authRoutes);           // NEW: User authentication
+app.use('/api/auth', authRoutes);           // User authentication
+app.use('/api/saved-assets', savedAssetsRoutes); // Saved assets management
 app.use('/api/generate', generateRoutes);   // Claude-powered content generation
 app.use('/api/validate', validateRoutes);   // Claude API key validation
 
@@ -638,11 +645,12 @@ app.use('*', (req, res) => {
     success: false,
     error: 'Endpoint not found',
     availableEndpoints: {
-      health: 'GET /health',
-      auth: 'POST /api/auth/{signup,login,logout,me}',
-      generate: 'POST /api/generate', 
-      validate: 'POST /api/validate/anthropic'
-    }
+  health: 'GET /health',
+  auth: 'POST /api/auth/{signup,login,logout,me}',
+  savedAssets: 'GET/POST /api/saved-assets',
+  generate: 'POST /api/generate', 
+  validate: 'POST /api/validate/anthropic'
+}
   });
 });
 
@@ -669,6 +677,7 @@ async function startServer() {
       console.log(`🚀 MarAI Backend with Authentication running on port ${PORT}`);
       console.log(`📱 Health check: http://localhost:${PORT}/health`);
       console.log(`🔐 Authentication: http://localhost:${PORT}/api/auth/*`);
+      console.log(`💾 Saved Assets: http://localhost:${PORT}/api/saved-assets/*`);
       console.log(`🤖 Generate endpoint: http://localhost:${PORT}/api/generate`);
       console.log(`🔑 Validate endpoint: http://localhost:${PORT}/api/validate`);
       console.log(`🧠 AI Provider: Claude 4 Sonnet (Anthropic)`);
@@ -1057,6 +1066,66 @@ export type AuthErrorCode =
   | 'VERIFICATION_CODE_EXPIRED'
   | 'EMAIL_RATE_LIMITED'
   | 'RESET_CODE_INVALID';
+
+// Saved Assets System Types
+export interface SavedAsset {
+  id: number;
+  user_id: number;
+  asset_type: AssetType;
+  title: string;
+  content: string;
+  metadata: Record<string, any>;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface CreateSavedAssetData {
+  userId: number;
+  assetType: AssetType;
+  title: string;
+  content: string;
+  metadata?: Record<string, any>;
+}
+
+export interface UpdateSavedAssetData {
+  title?: string;
+  content?: string;
+  metadata?: Record<string, any>;
+}
+
+export type AssetType = 
+  | 'marketing' 
+  | 'social' 
+  | 'email' 
+  | 'email-built' 
+  | 'landing' 
+  | 'persona' 
+  | 'content' 
+  | 'ads';
+
+export const VALID_ASSET_TYPES: AssetType[] = [
+  'marketing', 'social', 'email', 'email-built', 
+  'landing', 'persona', 'content', 'ads'
+];
+
+export const ASSET_TYPE_LABELS: Record<AssetType, string> = {
+  'marketing': 'Marketing',
+  'social': 'Social Media',
+  'email': 'Email',
+  'email-built': 'Emails Built',
+  'landing': 'Landing Pages',
+  'persona': 'Personas',
+  'content': 'Content',
+  'ads': 'Ads'
+};
+
+export interface SavedAssetStats {
+  total: number;
+  byType: Record<AssetType, number>;
+  recentActivity: Date | null;
+  spaceUsed: number;
+  limit: number;
+}
 ```
 
 ### Type System Analysis
@@ -2323,6 +2392,212 @@ export const userModel = new UserModel();
 - Error Handling: Comprehensive error messages for debugging
 - Type Safety: Full TypeScript integration with defined interfaces
 
+## 💾 Saved Assets Model
+### models/SavedAsset.ts - Saved Assets Database Operations
+```typescript
+import { db } from '../config/database';
+import { SavedAsset, CreateSavedAssetData, UpdateSavedAssetData, AssetType, SavedAssetStats, VALID_ASSET_TYPES } from '../types';
+
+class SavedAssetModel {
+  /**
+   * Create new saved asset
+   */
+  async createAsset(data: CreateSavedAssetData): Promise<SavedAsset> {
+    const { userId, assetType, title, content, metadata = {} } = data;
+    
+    // Validate asset type
+    if (!VALID_ASSET_TYPES.includes(assetType)) {
+      throw new Error(`Invalid asset type: ${assetType}`);
+    }
+    
+    // Validate required fields
+    if (!title.trim() || !content.trim()) {
+      throw new Error('Title and content are required');
+    }
+    
+    const query = `
+      INSERT INTO saved_assets (user_id, asset_type, title, content, metadata)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING *
+    `;
+    
+    const result = await db.query(query, [userId, assetType, title.trim(), content, JSON.stringify(metadata)]);
+    return result.rows[0];
+  }
+
+  /**
+   * Get user's saved assets with filtering
+   */
+  async getUserAssets(
+    userId: number, 
+    filters: {
+      type?: AssetType;
+      search?: string;
+      limit?: number;
+      offset?: number;
+    } = {}
+  ): Promise<{ assets: SavedAsset[]; hasMore: boolean }> {
+    const { type, search, limit = 20, offset = 0 } = filters;
+    
+    let query = `
+      SELECT * FROM saved_assets 
+      WHERE user_id = $1
+    `;
+    const params: any[] = [userId];
+    let paramCount = 1;
+    
+    // Add type filter
+    if (type && type !== 'all') {
+      paramCount++;
+      query += ` AND asset_type = $${paramCount}`;
+      params.push(type);
+    }
+    
+    // Add search filter
+    if (search && search.trim()) {
+      paramCount++;
+      query += ` AND (title ILIKE $${paramCount} OR content ILIKE $${paramCount})`;
+      params.push(`%${search.trim()}%`);
+    }
+    
+    query += ` ORDER BY created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
+    params.push(limit + 1, offset); // Get one extra to check hasMore
+    
+    const result = await db.query(query, params);
+    const assets = result.rows.slice(0, limit);
+    const hasMore = result.rows.length > limit;
+    
+    return { assets, hasMore };
+  }
+
+  /**
+   * Get asset by ID (user-scoped)
+   */
+  async getAssetById(assetId: number, userId: number): Promise<SavedAsset | null> {
+    const query = 'SELECT * FROM saved_assets WHERE id = $1 AND user_id = $2';
+    const result = await db.query(query, [assetId, userId]);
+    return result.rows[0] || null;
+  }
+
+  /**
+   * Update saved asset
+   */
+  async updateAsset(assetId: number, userId: number, data: UpdateSavedAssetData): Promise<SavedAsset | null> {
+    const { title, content, metadata } = data;
+    
+    // Build dynamic query
+    const fields = [];
+    const values = [];
+    let paramCount = 1;
+    
+    if (title !== undefined) {
+      fields.push(`title = $${paramCount++}`);
+      values.push(title.trim());
+    }
+    if (content !== undefined) {
+      fields.push(`content = $${paramCount++}`);
+      values.push(content);
+    }
+    if (metadata !== undefined) {
+      fields.push(`metadata = $${paramCount++}`);
+      values.push(JSON.stringify(metadata));
+    }
+    
+    if (fields.length === 0) {
+      throw new Error('No fields provided for update');
+    }
+    
+    fields.push(`updated_at = NOW()`);
+    values.push(assetId, userId);
+    
+    const query = `
+      UPDATE saved_assets 
+      SET ${fields.join(', ')}
+      WHERE id = $${paramCount} AND user_id = $${paramCount + 1}
+      RETURNING *
+    `;
+    
+    const result = await db.query(query, values);
+    return result.rows[0] || null;
+  }
+
+  /**
+   * Delete saved asset
+   */
+  async deleteAsset(assetId: number, userId: number): Promise<boolean> {
+    const query = 'DELETE FROM saved_assets WHERE id = $1 AND user_id = $2';
+    const result = await db.query(query, [assetId, userId]);
+    return result.rowCount > 0;
+  }
+
+  /**
+   * Get user's saved asset statistics
+   */
+  async getUserStats(userId: number): Promise<SavedAssetStats> {
+    const query = `
+      SELECT 
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE asset_type = 'marketing') as marketing,
+        COUNT(*) FILTER (WHERE asset_type = 'social') as social,
+        COUNT(*) FILTER (WHERE asset_type = 'email') as email,
+        COUNT(*) FILTER (WHERE asset_type = 'email-built') as email_built,
+        COUNT(*) FILTER (WHERE asset_type = 'landing') as landing,
+        COUNT(*) FILTER (WHERE asset_type = 'persona') as persona,
+        COUNT(*) FILTER (WHERE asset_type = 'content') as content,
+        COUNT(*) FILTER (WHERE asset_type = 'ads') as ads,
+        MAX(created_at) as recent_activity,
+        SUM(LENGTH(content)) as space_used
+      FROM saved_assets 
+      WHERE user_id = $1
+    `;
+    
+    const result = await db.query(query, [userId]);
+    const stats = result.rows[0];
+    
+    return {
+      total: parseInt(stats.total),
+      byType: {
+        marketing: parseInt(stats.marketing),
+        social: parseInt(stats.social),
+        email: parseInt(stats.email),
+        'email-built': parseInt(stats.email_built),
+        landing: parseInt(stats.landing),
+        persona: parseInt(stats.persona),
+        content: parseInt(stats.content),
+        ads: parseInt(stats.ads)
+      },
+      recentActivity: stats.recent_activity,
+      spaceUsed: parseInt(stats.space_used) || 0,
+      limit: 100
+    };
+  }
+
+  /**
+   * Search user's saved assets
+   */
+  async searchAssets(userId: number, searchTerm: string, assetType?: AssetType): Promise<SavedAsset[]> {
+    let query = `
+      SELECT * FROM saved_assets 
+      WHERE user_id = $1 
+      AND (title ILIKE $2 OR content ILIKE $2)
+    `;
+    const params = [userId, `%${searchTerm}%`];
+    
+    if (assetType && assetType !== 'all') {
+      query += ' AND asset_type = $3';
+      params.push(assetType);
+    }
+    
+    query += ' ORDER BY created_at DESC LIMIT 50';
+    
+    const result = await db.query(query, params);
+    return result.rows;
+  }
+}
+
+export const savedAssetModel = new SavedAssetModel();
+```
+
 ## 🔑 Token Management Model
 ### models/Token.ts - Token Database Operations
 ```typescript
@@ -3225,6 +3500,68 @@ END;
 $$ LANGUAGE plpgsql;
 ```
 
+### migrations/006_create_saved_assets_table.sql - Saved Assets System
+```sql
+-- Create saved_assets table for content library
+CREATE TABLE IF NOT EXISTS saved_assets (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    asset_type VARCHAR(20) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+    
+    -- Constraints
+    CONSTRAINT saved_assets_title_length CHECK (LENGTH(title) >= 1 AND LENGTH(title) <= 255),
+    CONSTRAINT saved_assets_content_not_empty CHECK (LENGTH(content) >= 1),
+    CONSTRAINT saved_assets_type_valid CHECK (asset_type IN (
+        'marketing', 'social', 'email', 'email-built', 
+        'landing', 'persona', 'content', 'ads'
+    ))
+);
+
+-- Performance indexes
+CREATE INDEX IF NOT EXISTS idx_saved_assets_user_id ON saved_assets(user_id);
+CREATE INDEX IF NOT EXISTS idx_saved_assets_type ON saved_assets(asset_type);
+CREATE INDEX IF NOT EXISTS idx_saved_assets_created ON saved_assets(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_saved_assets_user_type ON saved_assets(user_id, asset_type);
+
+-- Full-text search index
+CREATE INDEX IF NOT EXISTS idx_saved_assets_search 
+    ON saved_assets USING gin(to_tsvector('english', title || ' ' || content));
+
+-- Update trigger for updated_at
+CREATE TRIGGER update_saved_assets_updated_at 
+    BEFORE UPDATE ON saved_assets 
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Function to enforce 100-item limit per user
+CREATE OR REPLACE FUNCTION enforce_saved_assets_limit()
+RETURNS TRIGGER AS $$
+DECLARE
+    asset_count INTEGER;
+BEGIN
+    SELECT COUNT(*) INTO asset_count 
+    FROM saved_assets 
+    WHERE user_id = NEW.user_id;
+    
+    IF asset_count >= 100 THEN
+        RAISE EXCEPTION 'User has reached maximum limit of 100 saved assets';
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_enforce_saved_assets_limit
+    BEFORE INSERT ON saved_assets
+    FOR EACH ROW
+    EXECUTE FUNCTION enforce_saved_assets_limit();
+```
+
 ### Database Schema Analysis
 #### Users Table Features
 - Auto-incrementing ID: Efficient primary key
@@ -3469,6 +3806,216 @@ export class EnhancedAIService extends AIService {
 ```
 
 ## 🛣️ Route Implementations
+### routes/savedAssets.ts - Saved Assets Management Endpoint
+```typescript
+import { Router } from 'express';
+import { savedAssetModel } from '../models/SavedAsset';
+import { authenticateUser } from '../middleware/authMiddleware';
+import { ApiResponse, AssetType } from '../types';
+
+const router = Router();
+
+/**
+ * GET / - Get user's saved assets with filtering
+ */
+router.get('/', authenticateUser, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const { type, search, limit, offset } = req.query;
+    
+    const filters = {
+      type: type as AssetType,
+      search: search as string,
+      limit: limit ? parseInt(limit) : 20,
+      offset: offset ? parseInt(offset) : 0
+    };
+    
+    const result = await savedAssetModel.getUserAssets(userId, filters);
+    
+    res.json({
+      success: true,
+      data: {
+        assets: result.assets,
+        hasMore: result.hasMore,
+        pagination: {
+          limit: filters.limit,
+          offset: filters.offset
+        }
+      }
+    } as ApiResponse);
+    
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+/**
+ * POST / - Create new saved asset
+ */
+router.post('/', authenticateUser, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const { assetType, title, content, metadata } = req.body;
+    
+    if (!assetType || !title || !content) {
+      return res.status(400).json({
+        success: false,
+        error: 'Asset type, title, and content are required'
+      } as ApiResponse);
+    }
+    
+    const newAsset = await savedAssetModel.createAsset({
+      userId,
+      assetType,
+      title,
+      content,
+      metadata
+    });
+    
+    res.status(201).json({
+      success: true,
+      data: { asset: newAsset },
+      message: 'Asset saved successfully'
+    } as ApiResponse);
+    
+  } catch (error: any) {
+    if (error.message.includes('maximum limit')) {
+      return res.status(429).json({
+        success: false,
+        error: 'You have reached the maximum limit of 100 saved assets'
+      } as ApiResponse);
+    }
+    
+    res.status(400).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+/**
+ * PUT /:id - Update saved asset
+ */
+router.put('/:id', authenticateUser, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const assetId = parseInt(req.params.id);
+    const { title, content, metadata } = req.body;
+    
+    const updatedAsset = await savedAssetModel.updateAsset(assetId, userId, {
+      title,
+      content,
+      metadata
+    });
+    
+    if (!updatedAsset) {
+      return res.status(404).json({
+        success: false,
+        error: 'Asset not found'
+      } as ApiResponse);
+    }
+    
+    res.json({
+      success: true,
+      data: { asset: updatedAsset },
+      message: 'Asset updated successfully'
+    } as ApiResponse);
+    
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+/**
+ * DELETE /:id - Delete saved asset
+ */
+router.delete('/:id', authenticateUser, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const assetId = parseInt(req.params.id);
+    
+    const deleted = await savedAssetModel.deleteAsset(assetId, userId);
+    
+    if (!deleted) {
+      return res.status(404).json({
+        success: false,
+        error: 'Asset not found'
+      } as ApiResponse);
+    }
+    
+    res.json({
+      success: true,
+      message: 'Asset deleted successfully'
+    } as ApiResponse);
+    
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+/**
+ * GET /stats - Get user's saved asset statistics
+ */
+router.get('/stats', authenticateUser, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const stats = await savedAssetModel.getUserStats(userId);
+    
+    res.json({
+      success: true,
+      data: { stats }
+    } as ApiResponse);
+    
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+/**
+ * POST /search - Search saved assets
+ */
+router.post('/search', authenticateUser, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const { searchTerm, assetType } = req.body;
+    
+    if (!searchTerm || searchTerm.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Search term is required'
+      } as ApiResponse);
+    }
+    
+    const assets = await savedAssetModel.searchAssets(userId, searchTerm, assetType);
+    
+    res.json({
+      success: true,
+      data: { assets }
+    } as ApiResponse);
+    
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    } as ApiResponse);
+  }
+});
+
+export default router;
+```
+
 ### routes/generate.ts - Content Generation Endpoint
 ```typescript
 import { Router } from 'express';
