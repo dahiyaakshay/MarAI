@@ -266,19 +266,28 @@
 │       │       003_add_user_profile_fields.sql
 │       │       004_create_email_verifications_table.sql
 │       │       005_create_password_resets_table.sql
+│       │       006_create_saved_assets_table.sql
+│       │       007_create_clients_table.sql
+│       │       008_create_client_content_table.sql
 │       │
 │       ├───models
+│       │       Client.ts
+│       │       ClientContent.ts
 │       │       EmailVerification.ts
+│       │       SavedAsset.ts
 │       │       Token.ts
 │       │       User.ts
 │       │
 │       ├───routes
 │       │       auth.ts
+│       │       clients.ts
 │       │       generate.ts
+│       │       savedAssets.ts
 │       │       validate.ts
 │       │
 │       ├───services
 │       │       aiService.ts
+│       │       clientService.ts
 │       │       emailService.ts
 │       │       tokenService.ts
 │       │
@@ -444,8 +453,10 @@
     │
     ├───components
     │   ├───Common
+    │   │       AnalysisReport.tsx
     │   │       DownloadButton.tsx
     │   │       MultiSelect.tsx
+    │   │       SaveButton.tsx
     │   │
     │   ├───Layout
     │   │       Header.tsx
@@ -454,6 +465,8 @@
     │   │
     │   ├───Modals
     │   │       AddClientModal.tsx
+    │   │       DeleteClientModal.tsx
+    │   │       EditClientModal.tsx
     │   │       EditModal.tsx
     │   │       EditPersonaModal.tsx
     │   │       GuidelinesModal.tsx
@@ -470,11 +483,17 @@
     │           MarketingCalendar.tsx
     │           PersonaBuilder.tsx
     │           PromptLibrary.tsx
+    │           SavedAssets.tsx
     │           Settings.tsx
     │           SocialCalendar.tsx
     │
-    └───services
-            apiService.ts
-            assetLoader.js
-            authService.ts
-            exportService.ts</pre>
+    ├───services
+    │       apiService.ts
+    │       assetLoader.js
+    │       authService.ts
+    │       clientService.ts
+    │       dataAnalysisService.ts
+    │       exportService.ts
+    │
+    └───utils
+            analysisUtils.ts</pre>
