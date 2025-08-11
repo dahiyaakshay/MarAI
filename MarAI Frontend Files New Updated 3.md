@@ -33,13 +33,14 @@
 - Authentication: Opaque token-based authentication with session management
 - User Management: Individual user accounts with profile system
 - Export Libraries: jsPDF, ExcelJS, file-saver (used in exportService.ts)
-
+- Client Management: Database-backed client organization with CRUD operations
+  
 ### 1.2 Core Files Structure
 - Entry Point: main.tsx
 - Main App: App.tsx
 - Styling: App.css, index.css, Sidebar.css
 - Services: apiService.ts, authService.ts, assetLoader.js, exportService.ts
-- Components: Layout, Common, Modals (5 modals), Pages (11 main tools with enhanced authentication)
+- Components: Layout, Common, Modals (7 modals including client management), Pages (11 main tools with enhanced authentication)
 
 ### 1.3 Core Dependencies
 - React 18 with TypeScript
@@ -50,6 +51,13 @@
 - file-saver: File download handling
 - ExcelJS: Excel file processing 
 
+### 1.4 Client Management System
+- **Full CRUD Operations**: Create, read, update, delete clients with backend persistence
+- **Content Organization**: All generated content automatically associated with selected client
+- **Safety Features**: Multi-layer deletion protection with content impact statistics
+- **Real-time Validation**: Form validation with immediate feedback and error handling
+- **Statistics Integration**: Client content analytics and dashboard integration
+  
 ## 2. Project Structure
 Based on imports and file organization:
 <pre>src/
@@ -222,6 +230,8 @@ Based on imports and file organization:
 │   │
 │   ├───Modals
 │   │       AddClientModal.tsx
+│   │       DeleteClientModal.tsx
+│   │       EditClientModal.tsx
 │   │       EditModal.tsx
 │   │       EditPersonaModal.tsx
 │   │       GuidelinesModal.tsx
@@ -246,7 +256,8 @@ Based on imports and file organization:
         apiService.ts
         assetLoader.js
         authService.ts
-        exportService.ts</pre>
+        exportService.ts
+        clientService.ts</pre>
 
 ## 3. Core Application Layer
 ### 3.1 main.tsx
@@ -270,6 +281,13 @@ Contains only:
 ```
 
 ### 3.3 App.tsx - Main Application Component
+#### Import Statements:
+```typescript
+import EditClientModal from './components/Modals/EditClientModal';
+import DeleteClientModal from './components/Modals/DeleteClientModal';
+import { clientService, type Client } from './services/clientService';
+```
+
 #### Page Data Structure:
 ```typescript
 const pageData = {
@@ -338,9 +356,75 @@ const [editModalData, setEditModalData] = useState(null);
 const [previewModalData, setPreviewModalData] = useState(null);
 const [guidelinesModalType, setGuidelinesModalType] = useState<'email' | 'landing-page'>('email');
 
-const [clients, setClients] = useState({
-  'default': { name: 'Select Client...', data: {} }
-});
+// Enhanced Client Management State
+const [clients, setClients] = useState<Client[]>([]);
+const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+const [editClientModalOpen, setEditClientModalOpen] = useState(false);
+const [deleteClientModalOpen, setDeleteClientModalOpen] = useState(false);
+const [clientLoading, setClientLoading] = useState(false);
+```
+
+#### Enhanced Client Management Handlers:
+```typescript
+// Client CRUD Operations
+const loadClients = async () => {
+  try {
+    setClientLoading(true);
+    const response = await clientService.getClients(true);
+    if (response.success) {
+      setClients(response.data);
+    }
+  } catch (error) {
+    console.error('Failed to load clients:', error);
+  } finally {
+    setClientLoading(false);
+  }
+};
+
+const openEditClientModal = (client: Client) => {
+  setSelectedClient(client);
+  setEditClientModalOpen(true);
+  document.body.style.overflow = 'hidden';
+};
+
+const closeEditClientModal = () => {
+  setEditClientModalOpen(false);
+  setSelectedClient(null);
+  document.body.style.overflow = 'auto';
+};
+
+const openDeleteClientModal = (client: Client) => {
+  setSelectedClient(client);
+  setDeleteClientModalOpen(true);
+  document.body.style.overflow = 'hidden';
+};
+
+const closeDeleteClientModal = () => {
+  setDeleteClientModalOpen(false);
+  setSelectedClient(null);
+  document.body.style.overflow = 'auto';
+};
+
+const handleClientUpdated = (updatedClient: Client) => {
+  setClients(prev => prev.map(c => c.id === updatedClient.id ? updatedClient : c));
+  setCurrentClient(updatedClient.id.toString());
+  closeEditClientModal();
+};
+
+const handleClientDeleted = (clientId: number) => {
+  setClients(prev => prev.filter(c => c.id !== clientId));
+  if (currentClient === clientId.toString()) {
+    setCurrentClient('default');
+  }
+  closeDeleteClientModal();
+};
+
+// Load clients on component mount
+useEffect(() => {
+  if (isAuthenticated) {
+    loadClients();
+  }
+}, [isAuthenticated]);
 ```
 
 #### Authentication State Management:
@@ -439,30 +523,33 @@ const toggleTheme = () => {
 };
 ```
 
-#### Client Management:
+#### Legacy Client Management (Updated):
 ```typescript
-const saveNewClient = (clientData) => {
-  const clientId = 'client' + (Object.keys(clients).length + 1);
-  setClients(prev => ({
-    ...prev,
-    [clientId]: {
-      name: clientData.companyName,
-      data: clientData
+const saveNewClient = async (clientData) => {
+  try {
+    const response = await clientService.createClient({
+      company_name: clientData.companyName,
+      industry: clientData.industry,
+      website: clientData.website,
+      contact_name: clientData.contactName,
+      contact_email: clientData.contactEmail,
+      contact_phone: clientData.phone,
+      contact_role: clientData.contactRole,
+      target_audience: clientData.targetAudience,
+      budget_range: clientData.budget,
+      goals: clientData.goals,
+      description: clientData.description,
+      notes: clientData.notes
+    });
+    
+    if (response.success) {
+      setClients(prev => [...prev, response.data]);
+      setCurrentClient(response.data.id.toString());
+      closeAddClientModal();
     }
-  }));
-  setCurrentClient(clientId);
-  closeAddClientModal();
-};
-
-const openGuidelinesModal = (type: 'email' | 'landing-page') => {
-  setGuidelinesModalType(type);
-  setGuidelinesModalOpen(true);
-  document.body.style.overflow = 'hidden';
-};
-
-const closeGuidelinesModal = () => {
-  setGuidelinesModalOpen(false);
-  document.body.style.overflow = 'auto';
+  } catch (error) {
+    console.error('Failed to create client:', error);
+  }
 };
 ```
 
@@ -488,7 +575,7 @@ onUse={(data) => {
     }, 100);
   }
   
-  // Handle saved asset reuse                    ← ADD THIS ENTIRE SECTION
+  // Handle saved asset reuse                    
   else if (data.type === 'saved-asset') {
     const asset = data.asset;
     
@@ -564,6 +651,61 @@ const renderActivePage = () => {
   }
 };
 ```
+
+#### JSX Return with Client Management Modals:
+```typescript
+// Add these modals to the main App JSX return (alongside existing modals)
+{selectedClient && (
+  <>
+    <EditClientModal
+      isOpen={editClientModalOpen}
+      onClose={closeEditClientModal}
+      client={selectedClient}
+      onClientUpdated={handleClientUpdated}
+    />
+
+    <DeleteClientModal
+      isOpen={deleteClientModalOpen}
+      onClose={closeDeleteClientModal}
+      client={selectedClient}
+      onClientDeleted={handleClientDeleted}
+    />
+  </>
+)}
+```
+
+#### Header Component Usage with Enhanced Client Management:
+```typescript
+<Header
+  title={pageData[activePage]?.title || 'MarAI'}
+  subtitle={pageData[activePage]?.subtitle || ''}
+  theme={theme}
+  toggleTheme={toggleTheme}
+  currentClient={currentClient}
+  clients={clients}                                    // Updated from object to array
+  switchClient={setCurrentClient}
+  openAddClientModal={openAddClientModal}
+  openEditClientModal={openEditClientModal}            // NEW
+  openDeleteClientModal={openDeleteClientModal}        // NEW
+  clientLoading={clientLoading}                        // NEW
+  user={user}
+  userProfileSummary={userProfileSummary}
+  onLogout={handleLogout}
+  navigateToPage={setActivePage}
+/>
+```
+
+- Note: The Header component now receives:
+   - clients as a Client[] array instead of an object
+   - New handlers for edit and delete operations
+   - Loading state for better UX during client operations
+
+#### Client-Content Integration:
+All generated content (emails, landing pages, personas, calendars, etc.) is automatically associated with the currently selected client, enabling:
+- Client-specific content organization
+- Content analytics per client
+- Bulk operations on client content
+- Client content impact assessment before deletion
 
 ## 4. Services Implementation
 ### 4.1 apiService.ts
@@ -1255,6 +1397,82 @@ export interface ContentData {
 
 The exportService.ts file contains extensive calendar export, content export, and persona export functionality with PDF and Excel generation capabilities. It includes methods like exportCalendarPDF, exportContentPDF, exportPersonasPDF, exportCalendarExcel, etc.
 
+### 4.5 clientService.ts
+#### Core Client Management Service:
+```typescript
+class ClientService {
+  private readonly baseUrl = 'http://localhost:3001/api/clients';
+  
+  private getAuthHeaders(): Record<string, string> {
+    const token = localStorage.getItem('authToken');
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    };
+  }
+}
+```
+
+#### CRUD Operations:
+```typescript
+async getClients(includeStats: boolean = false): Promise<ApiResponse<ClientSummary[]>>
+async getClient(clientId: number): Promise<ApiResponse<Client & { stats: ClientStats }>>
+async createClient(clientData: CreateClientData): Promise<ApiResponse<Client>>
+async updateClient(clientId: number, updateData: UpdateClientData): Promise<ApiResponse<Client>>
+async deleteClient(clientId: number): Promise<ApiResponse<void>>
+```
+
+#### Client Type Definitions:
+```typescript
+interface Client {
+  id: number;
+  user_id: number;
+  company_name: string;
+  industry?: string;
+  website?: string;
+  contact_name?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  contact_role?: string;
+  target_audience?: string;
+  budget_range?: string;
+  goals?: string[];
+  description?: string;
+  brand_colors?: Record<string, any>;
+  brand_guidelines?: string;
+  notes?: string;
+  is_active: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+interface ClientStats {
+  content_count: number;
+  email_count: number;
+  landing_page_count: number;
+  persona_count: number;
+  calendar_count: number;
+  content_creator_count: number;
+  ads_analysis_count: number;
+  last_activity?: Date;
+  content_by_type: Record<string, number>;
+}
+```
+
+#### Content Management Methods:
+```typescript
+async getClientContent(clientId: number, filters: ContentFilters = {}): Promise<ApiResponse<ClientContent[]>>
+async getClientStats(clientId: number): Promise<ApiResponse<ClientStats>>
+async toggleContentFavorite(contentId: number): Promise<ApiResponse<ClientContent>>
+async deleteContent(contentId: number): Promise<ApiResponse<void>>
+```
+
+#### Export:
+```typescript
+export const clientService = new ClientService();
+export type { Client, ClientStats, ClientSummary };
+```
+
 ## 5. Component System
 ### 5.1 Layout Components
 #### Header.tsx
@@ -1265,14 +1483,45 @@ interface HeaderProps {
   theme: string;
   toggleTheme: () => void;
   currentClient: string;
-  clients: Record<string, { name: string; data: any }>;
+  clients: Client[];                           // Updated from Record to Client array
   switchClient: (clientId: string) => void;
   openAddClientModal: () => void;
+  openEditClientModal: (client: Client) => void;     // NEW
+  openDeleteClientModal: (client: Client) => void;   // NEW
+  clientLoading: boolean;                      // NEW
   user: User | null;
-  userProfileSummary?: UserProfileSummary | null;  // NEW
+  userProfileSummary?: UserProfileSummary | null;
   onLogout: () => void;
-  navigateToPage?: (page: string) => void;         // NEW
+  navigateToPage?: (page: string) => void;
 }
+```
+
+#### Enhanced Client Display Logic:
+```typescript
+// Client dropdown with enhanced actions
+const getCurrentClientData = (): Client | null => {
+  if (!currentClient || currentClient === 'default') return null;
+  return clients.find(c => c.id.toString() === currentClient) || null;
+};
+
+const renderClientActions = (client: Client) => (
+  <div className="client-actions">
+    <button 
+      className="client-action-btn" 
+      onClick={() => openEditClientModal(client)}
+      title="Edit Client"
+    >
+      <Edit size={14} />
+    </button>
+    <button 
+      className="client-action-btn delete" 
+      onClick={() => openDeleteClientModal(client)}
+      title="Delete Client"
+    >
+      <Trash2 size={14} />
+    </button>
+  </div>
+);
 ```
 
 #### Enhanced User Display Logic:
@@ -1407,6 +1656,42 @@ type AssetType =
    - Success/error callbacks for tool integration
    - Loading states during save operations
    - Integration with conversation memory systems
+
+### 5.3 Enhanced Modal System
+#### Client Management Modals (New):
+**EditClientModal.tsx**
+```typescript
+interface EditClientModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  client: Client;
+  onClientUpdated: (updatedClient: Client) => void;
+}
+```
+
+- Features:
+   - Three-section form: Company Info, Contact Details, Marketing Data
+   - Real-time form validation with immediate error feedback
+   - Backend integration with PUT requests to /api/clients/:id
+   - Loading states and error handling
+   - Goals array conversion to/from textarea format
+
+#### DeleteClientModal.tsx
+```typescript
+interface DeleteClientModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  client: Client;
+  onClientDeleted: (clientId: number) => void;
+}
+```
+
+- Safety Features:
+   - Content impact statistics loading from /api/clients/:id/stats
+   - Required company name confirmation in monospace input
+   - Visual warnings with red color scheme
+   - Content preservation notice (content becomes "Unassigned")
+   - Multi-layer protection against accidental deletion
 
 ## 6. Page Components Implementation
 ### 6.1 ContentCreator.tsx
@@ -3275,7 +3560,102 @@ const copyToClipboard = async (text: string, sectionId: string) => {
 - Landing Page-specific: Responsive design, platform considerations, multi-file output
 - Universal: Color specifications, tracking setup, accessibility guidelines
 
-### 9.6 Enhanced PreviewModal with Saved Assets Support
+### 9.6 EditClientModal.tsx
+Purpose: Full-featured client editing with backend integration and comprehensive validation
+#### Form Structure (3 Sections):
+```typescript
+interface EditClientModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  client: Client;
+  onClientUpdated: (updatedClient: Client) => void;
+}
+```
+
+#### Backend Integration:
+```typescript
+const handleSubmit = async () => {
+  if (!validateForm()) return;
+  
+  setLoading(true);
+  try {
+    const response = await fetch(`http://localhost:3001/api/clients/${client.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+      },
+      body: JSON.stringify(updateData)
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      onClientUpdated(result.data);
+      onClose();
+    }
+  } catch (error) {
+    setErrors({ general: error.message });
+  } finally {
+    setLoading(false);
+  }
+};
+```
+
+- Form Validation System:
+   - Required field validation for company name
+   - Email format validation with regex pattern
+   - Website URL validation (must start with http/https)
+   - Phone number length validation
+   - Real-time error clearing on user input
+
+### 9.7 DeleteClientModal.tsx
+Purpose: Safety-first client deletion with content impact statistics and confirmation
+#### Multi-Layer Protection System:
+```typescript
+interface DeleteClientModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  client: Client;
+  onClientDeleted: (clientId: number) => void;
+}
+```
+
+#### Content Statistics Loading:
+```typescript
+const loadClientStats = async () => {
+  const response = await fetch(`http://localhost:3001/api/clients/${client.id}/stats`, {
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+    }
+  });
+  const result = await response.json();
+  setClientStats(result.data);
+};
+```
+
+#### Confirmation Requirement:
+```typescript
+// User must type exact company name to enable deletion
+const isConfirmationValid = confirmationText === client.company_name;
+
+<input
+  type="text"
+  className="confirmation-input"
+  placeholder={`Type "${client.company_name}" to confirm`}
+  value={confirmationText}
+  onChange={(e) => setConfirmationText(e.target.value)}
+  style={{ fontFamily: 'monospace' }}
+/>
+```
+
+- Safety Features:
+   - Visual warnings with red color scheme
+   - Content impact display (emails, personas, calendars affected)
+   - Required company name confirmation
+   - Content preservation notice
+   - Statistics grid showing content breakdown
+
+### 9.8 Enhanced PreviewModal with Saved Assets Support
 #### Saved Asset Preview Implementation:
 ```typescript
 // Enhanced PreviewModal handling for saved assets
