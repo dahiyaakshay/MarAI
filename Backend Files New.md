@@ -1,10 +1,18 @@
 # MarAI Backend Server Files - Complete Developer Guide
 
-- **Overview:** MarAI is a comprehensive marketing automation platform backend built with Node.js, TypeScript, and PostgreSQL, featuring Claude AI-powered content generation, user authentication, and client management capabilities.
-- **🎯 Purpose:** Comprehensive guide to MarAI's backend server architecture and implementation
-- **👥 Target Audience:** Backend developers, DevOps engineers, and system architects
+- **Overview:** MarAI is a comprehensive marketing automation platform backend built with Node.js, TypeScript, and PostgreSQL. It features Claude AI-powered content generation, user authentication, and client management capabilities following a "Claude-first" architecture.
+- **Purpose:** Comprehensive guide to MarAI's backend server architecture and implementation
+- **Target Audience:** Backend developers, DevOps engineers, and system architects
 
-## 📁 Backend Structure Overview
+## Key Features:
+- AI Content Generation: Direct Claude API integration for marketing content creation
+- Client Management: Complete business client lifecycle management
+- User Authentication: JWT-based auth with email verification
+- Content Storage: Database-backed content management with analytics
+- Rate Limiting: Memory-based request limiting for API protection
+- Email Services: SMTP-based notification system
+
+## Backend Structure Overview
 <pre>server/ (Backend Root)
 │   .env
 │   .env.example
@@ -1658,3 +1666,248 @@ router.use(authenticateUser); // or validateApiKeys for generate.ts
 - clientContentModel: Content management and statistics
 - savedAssetModel: Asset management with user limits
 - emailVerificationModel: Email verification workflow
+
+## Configuration Files
+### package.json
+- Framework: Express.js 4.18.2 with TypeScript
+- AI Integration: @anthropic-ai/sdk ^0.56.0 for Claude API
+- Database: PostgreSQL with pg ^8.16.3
+- Security: bcrypt, helmet, cors, rate-limiter-flexible
+- Development: tsx for hot reloading, Jest for testing
+- Scripts: Development server, build, migrations, database setup
+
+### tsconfig.json
+- Target: ES2020 with CommonJS modules
+- Strict mode: Full TypeScript type safety
+- Output: ./dist directory for compiled JavaScript
+
+### .env/.env.example
+- Database: PostgreSQL connection settings with pooling
+- Email: SMTP configuration for Gmail
+- Authentication: Token expiry and rate limiting settings
+- Security: Feature flags and validation parameters
+
+### .gitignore
+- Excludes: node_modules, dist, .env files, uploads, IDE files
+- Includes: Log files, OS-specific files protection
+
+## Core Server Files
+### src/index.ts (Main Server)
+- Express Setup: CORS, Helmet security, rate limiting
+- Route Configuration: Authentication, generation, validation, clients, assets
+- Health Monitoring: Database health checks with pool statistics
+- Error Handling: Global error handler with request context logging
+- Graceful Shutdown: Proper cleanup on SIGTERM/SIGINT
+
+### src/config/database.ts
+- PostgreSQL Pool: Connection pooling with health monitoring
+- Database Manager: Connection testing, health checks, statistics
+- Auto-reconnection: Handles connection failures gracefully
+- Environment Config: SSL support for production
+
+## Authentication & Security
+### src/middleware/auth.ts
+- Dual Authentication: Claude API keys + optional user tokens
+- Settings Compatibility: Handles multiple API key formats
+- Rate Limiting Integration: User-based or IP-based keys
+- Legacy Support: Backward compatibility for old key formats
+
+### src/middleware/authMiddleware.ts
+- JWT Token Validation: Bearer token authentication
+- User Context: Attaches user info to requests
+- Optional Auth: Non-blocking authentication for public endpoints
+- Token Cleanup: Handles orphaned tokens automatically
+
+### src/middleware/rateLimiter.ts
+- Memory-Based: RateLimiterMemory for distributed-ready limiting
+- Default Limits: 100 requests per 15 minutes per IP
+- Configurable: Environment-based configuration
+- Error Responses: 429 status with Retry-After headers
+
+## AI & Services
+### src/services/aiService.ts
+- Claude Integration: Direct Claude Sonnet 4 API communication
+- Conversation Support: Full conversation history with token management
+- Token Estimation: ~4 characters per token calculation
+- Response Processing: Markdown cleanup and formatting
+- Legacy Compatibility: Single prompt to conversation conversion
+
+### src/services/clientService.ts
+- Client Analytics: Content metrics, activity tracking
+- Dashboard Data: Comprehensive business intelligence
+- Content Storage: AI-generated content with metadata tracking
+- Search & Filter: Advanced client content organization
+- Export Functions: Data export capabilities
+
+### src/services/emailService.ts
+- Email Types: Verification, password reset, welcome emails
+- Rate Limiting: Per-email-type rate limiting
+- SMTP Integration: Gmail SMTP with app passwords
+- Template System: HTML email templates with styling
+- Delivery Tracking: Success/failure logging
+
+### src/services/tokenService.ts
+- Token Generation: Cryptographically secure 64-character tokens
+- Validation: Token format and expiry checking
+- User Limits: Maximum 10 tokens per user
+- Maintenance: Automatic cleanup of expired tokens
+- Security Features: Device tracking and statistics
+
+## Database Models
+### src/models/User.ts
+- Profile Management: Extended user profiles with completion tracking
+- Security: bcrypt password hashing (12 salt rounds)
+- Email Verification: Verification status tracking
+- Profile Statistics: Completion percentage calculation
+
+### src/models/Client.ts
+- Business Info: Company details, industry, budget ranges
+- Contact Management: Multiple contact methods and roles
+- Brand Information: Colors, guidelines, target audience
+- Ownership Validation: User-client relationship enforcement
+
+### src/models/ClientContent.ts
+- Content Types: 20+ content types (emails, landing pages, personas, etc.)
+- Versioning: Content versioning with parent-child relationships
+- AI Metadata: Provider, model, token count, generation time
+- Search & Analytics: Full-text search and usage statistics
+
+### src/models/SavedAsset.ts
+- Asset Management: Personal content library (100-item limit)
+- Asset Types: Marketing, social, email, landing, persona, content, ads
+- Search Functionality: Title and content search with filtering
+- Usage Statistics: Asset count tracking by type
+
+### src/models/Token.ts
+- Session Management: JWT token lifecycle
+- Multi-device: Multiple active sessions per user
+- Security: SHA256 hashing for storage
+- Expiry Handling: Automatic cleanup and extension
+
+### src/models/EmailVerification.ts
+- 6-digit Codes: Cryptographically secure verification codes
+- Rate Limiting: 3 requests per hour per user
+- Attempt Tracking: Limited attempts with progressive feedback
+- Auto-cleanup: Expired verification removal
+
+## API Routes
+### src/routes/auth.ts
+- Registration: Enhanced profiles with validation
+- Login: JWT token generation
+- Email Verification: 6-digit code system with rate limiting
+- Password Reset: Secure 6-digit reset codes (10-minute expiry)
+- Profile Management: Update profiles and passwords
+
+### src/routes/generate.ts
+- Dual Input: Single prompt OR conversation history
+- Client Integration: Content storage with client association
+- AI Provider Support: Claude-focused with extensible architecture
+- Error Classification: Specific error types for different failures
+
+### src/routes/clients.ts
+- CRUD Operations: Complete client lifecycle management
+- Analytics: Client statistics and activity tracking
+- Content Integration: Client-content relationship management
+- Bulk Operations: Multiple client management features
+
+### src/routes/savedAssets.ts
+- Asset CRUD: Create, read, update, delete operations
+- User Limits: 100-asset limit enforcement
+- Search & Filter: Advanced asset discovery
+- Statistics: Asset usage and remaining slots tracking
+
+### src/routes/validate.ts
+- API Key Validation: Anthropic SDK compatibility testing
+- Multi-version Support: Handles different SDK structures
+- Error Classification: Specific error types for validation failures
+
+## Database Migrations
+### 001_create_users_table.sql
+- Core Authentication: Email, password hash, timestamps
+- Validation: Email format and length constraints
+- Auto-triggers: updated_at automatic updating
+
+### 002_create_tokens_table.sql
+- Session Management: Token storage with user relationship
+- Security: 64-character hex token format validation
+- Limits: Maximum 10 tokens per user with cleanup
+- Analytics: Token statistics and monitoring views
+
+### 003_add_user_profile_fields.sql
+- Profile Extension: Names, profession, country fields
+- Email Verification: Verification status tracking
+- Profile Analytics: Completion percentage calculation
+- Display Functions: Name formatting and initials generation
+
+### 004_create_email_verifications_table.sql
+- Verification System: SHA256-hashed 6-digit codes
+- Rate Limiting: 3 requests per hour, 1-minute minimum gap
+- Audit Trail: Email sending attempt logging
+- Auto-cleanup: Expired verification removal
+
+### 005_create_password_resets_table.sql
+- Reset Security: IP and user agent tracking
+- Rate Limiting: 2 requests per 30 minutes, 5-minute gaps
+- Security Monitoring: Suspicious IP detection
+- Token Invalidation: Auto-logout on password reset
+
+### 006_create_saved_assets_table.sql
+- Asset Storage: Personal content library management
+- Type System: 8 predefined asset types
+- User Limits: 100-asset limit enforcement
+- Analytics: Asset statistics and usage tracking
+
+### 007_create_clients_table.sql
+- Client Management: Business information storage
+- Contact System: Multiple contact methods and roles
+- Brand Management: Colors, guidelines, audience data
+- Business Rules: Unique company names per user
+
+### 008_create_client_content_table.sql
+- Content Storage: AI-generated content with metadata
+- Content Types: 20+ predefined content categories
+- Versioning: Parent-child content relationships
+- Analytics: Token usage, generation time, access tracking
+- Search: Full-text search capabilities
+
+## Type System (src/types/index.ts)
+### Core Interfaces
+- User & PublicUser: Authentication and profile management
+- Client & ClientContent: Business relationship management
+- SavedAsset: Personal content library
+- Token Management: Authentication session handling
+- API Responses: Standardized response formats
+
+### Content Type System
+- 20+ Content Types: Emails, landing pages, personas, calendars, analysis
+- Validation: Strict content type checking
+- Metadata: Flexible additional data storage
+
+### Error Handling
+- Typed Errors: Specific error codes for different failure types
+- Response Consistency: Standardized error response format
+- Request Context: Enhanced error logging with context
+
+## Architecture Highlights
+### Claude-First Design
+- Direct Integration: No intermediary AI services
+- Minimal Processing: Clean input → Claude → clean output
+- Conversation Aware: Full history support with intelligent token management
+
+### Security Features
+- Multi-layer Authentication: API keys + user tokens
+- Rate Limiting: Memory-based with IP and user tracking
+- Input Validation: Comprehensive validation across all endpoints
+- Audit Logging: Security event tracking and monitoring
+
+### Performance Optimization
+- Connection Pooling: PostgreSQL connection management
+- Indexes: Optimized database queries with composite indexes
+- Caching: Memory-based rate limiting for fast lookups
+- Pagination: Efficient data loading with limit/offset
+
+### Business Intelligence
+- Client Analytics: Content metrics and activity tracking
+- Usage Statistics: Token usage and generation time monitoring
+- Dashboard Data: Comprehensive business insights
+- Content Organization: Advanced search and categorization
