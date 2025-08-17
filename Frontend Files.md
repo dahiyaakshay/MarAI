@@ -1,5 +1,8 @@
 # MarAI Frontend Implementation Documentation
 
+## Overview: MarAI
+MarAI is a comprehensive AI-powered marketing platform built with React TypeScript that provides multiple marketing tools in one integrated system. It's designed to help marketers create, plan, analyze, and manage various marketing assets and campaigns using artificial intelligence.
+
 ## Project Structure
 <pre>src/
 │   App.css
