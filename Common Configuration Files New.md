@@ -1,6 +1,6 @@
 # MarAI Common Configuration Files - Complete Developer Guide
 
-- **🎯 Purpose:** Comprehensive guide to MarAI's shared configuration files for future updates and maintenance
+- **Tool Overview:** MarAI is a comprehensive marketing tool built with React, TypeScript, and Vite. It's designed as a complete marketing solution that includes email template generation, landing page creation, and various marketing asset generators. The tool provides both templates and wireframes for different marketing use cases.
 
 ## 📁 File Structure Overview
 <pre>MarAI/ (Root - Common Files)
@@ -242,7 +242,14 @@
                                 metadata.json
                                 preview.png
                                 wireframe.html</pre>
-                                
+
+## Core Technology Stack
+- Frontend Framework: React 18.3.1 with TypeScript
+- Build Tool: Vite 7.0.3 (fast development and building)
+- Styling: Tailwind CSS 3.4.1 (utility-first CSS framework)
+- Icons: Lucide React (modern icon library)
+- Code Quality: ESLint with TypeScript support
+
 ## 🔧 Configuration Files
 ### 1. .gitignore
 ```bash
@@ -531,3 +538,126 @@ npx tsc --noEmit
 # Build test
 npm run build
 ```
+
+## Project Structure
+### Root Configuration Files
+#### 1. .gitignore
+   - Purpose: Controls version control exclusions
+   - Key Exclusions: node_modules/, dist/, .env files, logs, IDE files, system files
+   - MarAI Specific: Excludes build outputs and sensitive environment variables
+
+#### 2. eslint.config.js
+   - Purpose: Code quality and linting configuration
+   - Setup: TypeScript ESLint with React hooks and React refresh plugins
+   - Rules: Enforces React hooks rules and component export patterns
+   - Target: All .ts and .tsx files with browser globals
+
+#### 3. index.html
+   - Purpose: Main HTML entry point
+   - Title: "Complete Marketing Tool"
+   - Structure: Minimal HTML5 with React root div and Vite module script
+
+#### 4. package.json
+   - Project Name: "vite-react-typescript-starter"
+   - ##### Key Production Dependencies:
+      - exceljs (4.4.0) - Excel file manipulation for exports
+      - file-saver (2.0.5) - File download functionality
+      - jspdf (3.0.1) + jspdf-autotable (5.0.2) - PDF generation
+      - jszip (3.10.1) - ZIP file creation for bulk exports
+      - lodash (4.17.21) - Utility functions
+      - papaparse (5.5.3) - CSV parsing
+
+#### 5. vite.config.ts
+- Purpose: Vite build tool configuration
+- Plugins: React plugin enabled
+- Optimization: Excludes lucide-react from dependency optimization
+
+#### 6. postcss.config.js
+- Purpose: PostCSS configuration for Tailwind
+- Plugins: Tailwind CSS and Autoprefixer
+
+#### 7. tailwind.config.js
+- Purpose: Tailwind CSS configuration
+- Content: Scans HTML and all JS/TS/JSX/TSX files in src/
+- Theme: Extended default theme (customizable)
+
+#### 8. tsconfig.app.json
+- Purpose: TypeScript configuration for application code
+- Target: ES2020 with DOM libraries
+- Module: ESNext with bundler resolution
+- JSX: React JSX transform
+- Strict Mode: Enabled with unused variable checking
+
+#### 9. tsconfig.json
+- Purpose: Root TypeScript configuration
+- Structure: References both app and node configurations
+
+#### 10. tsconfig.node.json
+- Purpose: TypeScript configuration for Node.js tools
+- Target: ES2022 for Vite configuration files
+
+## Asset Structure
+### Email Templates & Wireframes
+The tool includes comprehensive email marketing assets:
+
+#### Template Categories:
+- Announcement (2 templates) - Company announcements and updates
+- Ecommerce (3 templates) - Product promotions and sales
+- Newsletter (2 templates) - Regular communications
+- Promotional (4 templates) - Marketing campaigns and offers
+- Welcome - User onboarding emails
+
+#### Wireframe Categories:
+- Announcement (2 wireframes) - Structural layouts for announcements
+- E-commerce (4 wireframes) - Product-focused email structures
+- Newsletter (1 wireframe) - Newsletter layout framework
+- Promotional (2 wireframes) - Marketing email structures
+- Welcome (1 wireframe) - Onboarding email structure
+
+### Landing Page Templates & Wireframes
+#### Template Categories:
+- Agency (1 template) - Marketing agency landing pages
+- Ecommerce (2 templates) - Online store landing pages
+- SaaS (5 templates) - Software service landing pages
+- Empty Categories: App, Course, Event, Portfolio, Startup (ready for expansion)
+
+#### Wireframe Categories:
+- Agency (2 wireframes) - Agency page structures
+- App (1 wireframe) - Mobile app landing structure
+- Ecommerce (2 wireframes) - E-commerce page layouts
+- SaaS (3 wireframes) - SaaS landing page frameworks
+- Startup (2 wireframes) - Startup company page structures
+
+### Asset File Structure
+Each template/wireframe includes:
+- metadata.json - Template information and configuration
+- preview.png - Visual preview image
+- template.html or wireframe.html - The actual HTML content
+
+## Development Features
+### Export Capabilities
+- Excel Export: Using ExcelJS for data export functionality
+- PDF Generation: JSPDF with auto-table for document creation
+- File Downloads: File-saver for client-side file downloads
+- Bulk Operations: JSZip for creating zip archives
+
+### Available Scripts
+- npm run dev - Start development server (typically port 5173)
+- npm run build - Create production build
+- npm run lint - Run code quality checks
+- npm run preview - Preview production build locally
+
+### Code Quality Features
+- TypeScript: Full type safety across the application
+- ESLint: Automated code quality enforcement
+- React Hooks Linting: Ensures proper React patterns
+- Strict Mode: Enhanced error catching and performance
+
+## Key Strengths of MarAI
+1. Comprehensive Marketing Solution: Covers email marketing and landing page creation
+2. Template Variety: Multiple categories for different marketing needs
+3. Modern Tech Stack: Uses latest React, TypeScript, and Vite for optimal development
+4. Export Capabilities: Multiple format exports (Excel, PDF, ZIP)
+5. Structured Assets: Well-organized template and wireframe system
+6. Developer-Friendly: Strong typing, linting, and modern build tools
+7. Scalable Architecture: Easy to add new template categories and features
