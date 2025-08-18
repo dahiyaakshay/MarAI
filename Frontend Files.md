@@ -1,4 +1,5 @@
 # MarAI Frontend Implementation Documentation
+MarAI is a comprehensive AI-powered marketing platform built with React TypeScript that provides multiple marketing tools in one integrated system. It's designed to help marketers create, plan, analyze, and manage various marketing assets and campaigns using artificial intelligence.
 
 ## Overview: MarAI
 MarAI is a comprehensive AI-powered marketing platform built with React TypeScript that provides multiple marketing tools in one integrated system. It's designed to help marketers create, plan, analyze, and manage various marketing assets and campaigns using artificial intelligence.
@@ -163,7 +164,6 @@ MarAI is a comprehensive AI-powered marketing platform built with React TypeScri
 │
 ├───components
 │   ├───Common
-│   │       AnalysisReport.tsx
 │   │       DownloadButton.tsx
 │   │       MultiSelect.tsx
 │   │       SaveButton.tsx
@@ -183,7 +183,6 @@ MarAI is a comprehensive AI-powered marketing platform built with React TypeScri
 │   │       PreviewModal.tsx
 │   │
 │   └───Pages
-│           AdsAnalysis.tsx
 │           Auth.tsx
 │           ContentCreator.tsx
 │           Dashboard.tsx
@@ -202,11 +201,21 @@ MarAI is a comprehensive AI-powered marketing platform built with React TypeScri
 │       assetLoader.js
 │       authService.ts
 │       clientService.ts
-│       dataAnalysisService.ts
-│       exportService.ts
-│
-└───utils
-        analysisUtils.ts</pre>
+│       exportService.ts</pre>
+
+## Core Features
+### Main Tools
+1. Dashboard - Marketing performance overview and analytics
+2. Marketing Calendar - Plan and schedule marketing campaigns
+3. Social Calendar - Schedule and manage social media posts
+4. Email Calendar - Plan and schedule email campaigns
+5. Email Generator - Generate compelling email content with AI
+6. Landing Page Builder - Create high-converting landing pages
+7. Persona Builder - Create and manage customer personas
+8. Content Creator - Generate any type of content with AI
+9. Saved Assets - manage and reuse saved content
+10. Prompt Library - Claude-optimized prompts for all tools
+11. Settings - Account and API key configuration
 
 ## Architecture Overview
 ### Technology Stack
@@ -297,10 +306,6 @@ const pageData = {
   'content-creator': {
     title: 'Content Creator',
     subtitle: 'Generate any type of content with AI'
-  },
-  'ads-analysis': {
-    title: 'Ads Analysis',
-    subtitle: 'Analyze your advertising data with AI'
   },
   'saved-assets': {
     title: 'Saved Assets',
@@ -554,71 +559,6 @@ All page components receive these props for consistent data access.
 - Theme variables must be maintained for consistency
 - Responsive design built into CSS classes
 
-## Analysis Utilities (analysisUtils.ts)
-### Core Data Parsing & Validation
-```typescript
-// Enhanced number parsing with K/M/B/T suffix support
-export const parseFormattedNumber = (value: string | number): number | null => {
-  // Handles direct numbers, string conversions, and suffix multipliers (K, M, B, T)
-  // Includes validation for non-numeric placeholders and formatting chars
-}
-
-// Safe division with fallback to prevent NaN/Infinity
-export const safeDivide = (numerator: number, denominator: number, fallback: number = 0): number => {
-  // Validates inputs, handles division by zero, ensures finite results
-}
-
-// Number validation with default fallbacks
-export const validateNumber = (value: any, defaultValue: number = 0): number => {
-  // Ensures all numeric inputs are finite and non-negative
-}
-```
-
-### Metric Calculations
-```typescript
-// All metric functions use validated inputs and safe division
-export const calculateROAS = (revenue: number | string, adSpend: number | string): number
-export const calculateCTR = (clicks: number | string, impressions: number | string): number
-export const calculateConversionRate = (conversions: number | string, clicks: number | string): number
-export const calculateCPC = (adSpend: number | string, clicks: number | string): number
-export const calculateCostPerConversion = (adSpend: number | string, conversions: number | string): number
-export const calculateProfitMargin = (revenue: number | string, adSpend: number | string): number
-export const calculateCAC = (adSpend: number | string, newCustomers: number | string): number
-export const calculateAOV = (revenue: number | string, orders: number | string): number
-```
-
-### Industry Benchmarks & Performance Analysis
-```typescript
-export const INDUSTRY_BENCHMARKS = {
-  ROAS: { excellent: 6.0, good: 4.0, average: 2.5, poor: 1.5 },
-  CTR: { excellent: 3.0, good: 2.0, average: 1.0, poor: 0.5 },
-  CONVERSION_RATE: { excellent: 5.0, good: 3.0, average: 2.0, poor: 1.0 },
-  CPC: { excellent: 0.5, good: 1.0, average: 2.0, poor: 5.0 }
-};
-
-export interface BenchmarkComparison {
-  value: number;
-  benchmark: number;
-  performance: 'excellent' | 'good' | 'average' | 'poor' | 'critical';
-  percentageDifference: number;
-  recommendation: string;
-}
-```
-
-### Data Validation System
-```typescript
-export interface ValidationResult {
-  isValid: boolean;
-  errors: string[];
-  warnings: string[];
-}
-
-// Validates advertising data rows with required fields and business logic
-export const validateAdDataRow = (row: any): ValidationResult
-// Validates CSV headers against required and recommended columns
-export const validateCSVHeaders = (headers: string[]): ValidationResult
-```
-
 ## API Service (apiService.ts)
 ### Core Authentication & Client Management
 ```typescript
@@ -659,17 +599,6 @@ async generateContent(
   // Adds client context if provided
   // Logs generation details for debugging
   // Returns structured API response
-}
-
-// Analysis Q&A functionality for ads analysis
-async generateAnalysisInsight(
-  analysisHTML: string,
-  userQuestion: string,
-  client?: Client
-): Promise<string> {
-  // Creates structured prompt with analysis context
-  // Uses existing generateContent method
-  // Handles client context and metadata
 }
 ```
 
@@ -1092,136 +1021,6 @@ private getContentTypeLabel(contentType: string): string
 - Export library integration (jsPDF, ExcelJS, file-saver)
 - Authentication middleware across all services
 
-## Data Analysis Service (dataAnalysisService.ts)
-### Universal Data Interfaces
-```typescript
-export interface UniversalRawData {
-  [key: string]: string; // Any column name with string values
-}
-
-export interface UniversalProcessedData {
-  [key: string]: any; // Any column with processed values
-  _metadata?: {
-    originalRow: number;
-    dataType: 'numerical' | 'categorical' | 'date' | 'mixed';
-  };
-}
-
-export interface DataSchema {
-  totalRecords: number;
-  columns: ColumnMapping[];
-  identifierColumns: string[];
-  metricColumns: string[];
-  demographicColumns: string[];
-  geographicColumns: string[];
-  temporalColumns: string[];
-  deviceColumns: string[];
-  behavioralColumns: string[];
-  detectedDataType: 'advertising' | 'sales' | 'marketing' | 'financial' | 'general' | 'unknown';
-}
-```
-
-### Column Mapping System
-```typescript
-private columnMappingPatterns = {
-  // Core identifiers
-  id: ['id', 'campaign_id', 'campaign id', 'campaignid'],
-  campaign: ['campaign', 'campaign_name', 'campaign name'],
-  platform: ['platform', 'channel', 'source', 'network'],
-  
-  // Core metrics
-  spend: ['spend', 'cost', 'ad_spend', 'budget', 'investment'],
-  revenue: ['revenue', 'income', 'sales', 'returns'],
-  clicks: ['clicks', 'click', 'visits', 'sessions'],
-  impressions: ['impressions', 'views', 'reach', 'exposure'],
-  conversions: ['conversions', 'sales', 'purchases', 'leads'],
-  
-  // Demographics
-  age: ['age', 'age_group', 'age_range'],
-  gender: ['gender', 'sex', 'male', 'female'],
-  
-  // Geographic
-  country: ['country', 'nation', 'region_country'],
-  state: ['state', 'province', 'region'],
-  city: ['city', 'metro', 'urban_area']
-};
-```
-
-### Number Parsing with K/M/B Support
-```typescript
-private parseFormattedNumber(value: string | number): number {
-  // Handles suffix multipliers (K, M, B, T)
-  let multiplier = 1;
-  if (cleaned.includes('k')) multiplier = 1000;
-  else if (cleaned.includes('m')) multiplier = 1000000;
-  else if (cleaned.includes('b')) multiplier = 1000000000;
-  else if (cleaned.includes('t')) multiplier = 1000000000000;
-  
-  // Remove formatting chars: [$£€¥₹,%\s]
-  // Returns parsed number * multiplier with validation
-}
-```
-
-### Main Analysis Flow
-```typescript
-public async analyzeCSV(csvContent: string): Promise<UniversalAnalysisResults> {
-  // 1. Parse CSV with Papa Parse
-  // 2. Analyze data schema and detect column types
-  // 3. Clean and process data universally
-  // 4. Calculate comprehensive metrics
-  // 5. Perform enhanced group analysis
-  // 6. Find top performers across categories
-  // 7. Generate intelligent insights
-  // 8. Generate actionable suggestions
-}
-```
-
-## Analysis Utilities (analysisUtils.ts)
-### Core Parsing Functions
-```typescript
-export const parseFormattedNumber = (value: string | number): number | null => {
-  // Enhanced number parsing with K/M/B/T suffix support
-  // Handles currency symbols, commas, spaces
-  // Returns null for invalid inputs
-}
-
-export const safeDivide = (numerator: number, denominator: number, fallback: number = 0): number => {
-  // Prevents NaN and Infinity results
-  // Validates inputs and returns fallback for invalid operations
-}
-
-export const validateNumber = (value: any, defaultValue: number = 0): number => {
-  // Safe number validation with default fallback
-  // Ensures non-negative values for metrics
-}
-```
-
-### Metric Calculations
-```typescript
-export const calculateROAS = (revenue: number | string, adSpend: number | string): number
-export const calculateCTR = (clicks: number | string, impressions: number | string): number
-export const calculateConversionRate = (conversions: number | string, clicks: number | string): number
-export const calculateCPC = (adSpend: number | string, clicks: number | string): number
-export const calculateProfitMargin = (revenue: number | string, adSpend: number | string): number
-```
-
-### Industry Benchmarks
-```typescript
-export const INDUSTRY_BENCHMARKS = {
-  ROAS: { excellent: 6.0, good: 4.0, average: 2.5, poor: 1.5 },
-  CTR: { excellent: 3.0, good: 2.0, average: 1.0, poor: 0.5 },
-  CONVERSION_RATE: { excellent: 5.0, good: 3.0, average: 2.0, poor: 1.0 },
-  CPC: { excellent: 0.5, good: 1.0, average: 2.0, poor: 5.0 }
-};
-```
-
-### Formatting Functions
-```typescript
-export const formatCurrency = (value: number | string, currency: string = '$', decimals: number = 2): string
-export const formatPercentage = (value: number | string, decimals: number = 2): string
-export const formatLargeNumber = (value: number | string, decimals: number = 1): string // K, M, B notation
-```
-
 ## Header Component (Header.tsx)
 ### User Management Interfaces
 ```typescript
@@ -1305,7 +1104,7 @@ interface SidebarProps {
 const navSections = {
   General: ['dashboard'],
   Calendar: ['marketing-calendar', 'social-calendar', 'email-calendar'],
-  Tools: ['email-generator', 'landing-page-builder', 'persona-builder', 'content-creator', 'ads-analysis'],
+  Tools: ['email-generator', 'landing-page-builder', 'persona-builder', 'content-creator'],
   Library: ['saved-assets', 'prompt-library', 'settings']
 };
 ```
@@ -1359,7 +1158,7 @@ const handleDownload = (format: 'pdf' | 'excel' | 'word') => {
 // Dropdown options with descriptions
 const options = [
   { format: 'pdf', title: 'Export as PDF', description: 'Formatted document with styling' },
-  { format: 'excel', title: 'Export as Excel', description: 'Spreadsheet for data analysis' }
+  { format: 'excel', title: 'Export as Excel' }
 ];
 ```
 
@@ -1408,7 +1207,7 @@ Purpose: Reusable save button component for saving various content types to asse
 ```typescript
 interface SaveButtonProps {
   content: string;
-  assetType: 'marketing' | 'social' | 'email' | 'email-built' | 'landing' | 'persona' | 'content' | 'ads';
+  assetType: 'marketing' | 'social' | 'email' | 'email-built' | 'landing' | 'persona' | 'content';
   defaultTitle?: string;
   metadata?: Record<string, any>;
   onSaveSuccess?: (savedAsset: any) => void;
@@ -1451,94 +1250,6 @@ Generates fallback titles from content:
 - Visual feedback: Success/error states with animations (successPulse, errorShake)
 - Auto-clear states: 3-5 second timeouts for status messages
 - Comprehensive validation: Content existence, character limits, API responses
-
-## AnalysisReport.tsx
-### Core Functionality
-Purpose: Comprehensive data analysis report component with multiple visualization types and Q&A conversation support
-#### Main Props:
-```typescript
-interface UniversalAnalysisReportProps {
-  results: UniversalAnalysisResults;
-  qaConversation?: QAItem[];
-  className?: string;
-}
-```
-
-### Data Structure Support
-#### UniversalAnalysisResults Schema:
-- dataSchema: Column detection and data type identification
-- overall: Total metrics and calculated metrics (ROAS, ROI, margins)
-- groupedAnalysis: Performance data grouped by categories
-- topPerformers: Best performing items by category
-- insights: AI-generated insights with impact levels
-- suggestions: Actionable recommendations
-
-### CSS-Based Chart System
-#### Three chart types implemented:
-1. CSSBarChart: Vertical bars with hover tooltips
-2. CSSPieChart: SVG-based pie chart with legend
-3. CSSHorizontalBarChart: Horizontal bars for rankings
-
-### Chart validation logic:
-- validateChartData(): Filters valid objects
-- safeNumber(): Handles formatted strings (2.5M, 1.2K, 45.6%)
-- safePercentage(): Converts decimals to percentages
-
-### Data Formatting System
-#### Metric formatting functions:
-- formatMetricValue(): Currency, percentages, large numbers based on key patterns
-- formatCalculatedMetricValue(): ROAS (2.5x), margins (25%), currency
-- Icon mapping for different metric types (spend→💰, clicks→👆)
-
-### Q&A Conversation Support
-#### QAItem Structure:
-```typescript
-interface QAItem {
-  question: string;
-  answer: string;
-  timestamp: string;
-}
-```
-
-- Displays conversation history with timestamps
-- Styled question/answer sections with distinct colors
-- HTML entity escaping for security
-
-### Performance Tables
-#### UniversalPerformanceTable Component:
-- Dynamic column generation from schema.metricColumns
-- Top 10 items display with record counts
-- Color-coded metrics (positive/negative performance)
-
-### Insights & Recommendations
-#### UniversalInsightCard:
-- Impact levels: high/medium/low with color coding
-- Insight types: success/warning/danger/info
-- Structured title, description, recommendation format
-
-### HTML Export Capability
-#### generateUniversalAnalysisHTML():
-- Complete standalone HTML report generation
-- Embedded CSS styles for offline viewing
-- Client information and Q&A conversation inclusion
-- All chart types rendered as HTML/CSS/SVG
-
-### Responsive Design
-- Grid-based layout with minmax(280px, 1fr)
-- Mobile-first approach with @media (max-width: 768px)
-- Chart adaptations for small screens
-
-### Error Handling
-- Graceful degradation for missing data
-- "No data available" fallbacks
-- Safe number parsing with default values
-- Chart validation before rendering
-
-### Key Helper Functions
-- getCategoryIcon(): Maps categories to icons
-- getPerformanceClass(): Determines excellent/good/poor ratings
-- formatLargeNumber(): Human-readable number formatting
-- getMetricCellClass(): Table cell styling based on values
 
 ## AddClientModal.tsx
 Purpose: Modal component for adding new client records with comprehensive form validation and API integration.
@@ -2306,8 +2017,7 @@ type AssetType =
   | 'email-built' 
   | 'landing' 
   | 'persona' 
-  | 'content' 
-  | 'ads';
+  | 'content' ;
 ```
 
 ### Asset Statistics Tracking
@@ -2498,111 +2208,6 @@ const parseContentResponse = (aiResponse: string) => {
 - Copy to Clipboard: Direct text copy
 - PDF/Word Export: Planned integration with exportService
 - Save Asset: Integration with SaveButton component
-
-## AdsAnalysis.tsx - Universal Data Analysis Tool
-### Core Architecture
-```typescript
-interface Client {
-  id: number;
-  user_id: number;
-  company_name: string;
-  industry?: string;
-  // ... additional client fields
-}
-
-interface ConversationMessage {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
-interface QAItem {
-  question: string;
-  answer: string;
-  timestamp: string;
-}
-
-interface DataValidationResult {
-  isValid: boolean;
-  errors: string[];
-  warnings: string[];
-  rowCount: number;
-  columnCount: number;
-  hasNumericData: boolean;
-  detectedFormat: 'csv' | 'excel' | 'unknown';
-}
-```
-
-### Key State Management
-```typescript
-// File and data states
-const [uploadedData, setUploadedData] = useState('');
-const [fileName, setFileName] = useState('');
-const [dataLoaded, setDataLoaded] = useState(false);
-
-// Analysis states
-const [analysisResults, setAnalysisResults] = useState<UniversalAnalysisResults | null>(null);
-const [qaConversation, setQaConversation] = useState<QAItem[]>([]);
-
-// Session management
-const [conversationHistory, setConversationHistory] = useState<ConversationMessage[]>([]);
-const [tokenCount, setTokenCount] = useState(0);
-const [sessionActive, setSessionActive] = useState(true);
-
-// Token limits
-const TOKEN_LIMIT = 50000;
-const TOKEN_WARNING_THRESHOLD = 0.8;
-const TOKEN_CRITICAL_THRESHOLD = 0.95;
-```
-
-### Critical Functions
-#### Data Validation System:
-```typescript
-const validateCSVData = (csvData: string): DataValidationResult => {
-  // Validates CSV structure, column consistency, numeric data detection
-  // Returns validation results with errors/warnings
-}
-```
-
-#### Universal Analysis Engine:
-```typescript
-const performSmartAnalysis = async (csvData: string): Promise<UniversalAnalysisResults> => {
-  // Validates data first
-  // Calls universalDataAnalysisService.analyzeCSV(csvData)
-  // Handles comprehensive error checking
-}
-```
-
-#### File Processing (Excel/CSV):
-```typescript
-const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-  // Supports .csv, .xlsx, .xls formats
-  // Uses ExcelJS for Excel conversion
-  // Validates converted data before processing
-}
-```
-
-#### AI Q&A System:
-```typescript
-const handleTextAnalysis = async () => {
-  // Manages Q&A conversations on top of analysis
-  // Uses generateUniversalAnalysisHTML for context
-  // Calls apiService.generateAnalysisInsight()
-}
-```
-
-### Service Dependencies
-- universalDataAnalysisService.analyzeCSV() - Core analysis engine
-- apiService.generateAnalysisInsight() - AI Q&A functionality
-- generateUniversalAnalysisHTML() - HTML report generation
-- ExcelJS - Excel file processing
-
-### Key Features
-- Universal data type detection (advertising, sales, marketing, financial)
-- Session token management with limits
-- Q&A conversation history on analysis results
-- Client context integration
-- Comprehensive error handling and validation
-- Export capabilities (HTML, download, copy)
 
 ## EmailGenerator.tsx - AI Email Creation Tool
 ### Core Architecture
@@ -2887,12 +2492,10 @@ try {
 
 #### Key Service Dependencies for All Tools
 1. apiService.generateContent() - Central AI content generation
-2. apiService.generateAnalysisInsight() - Analysis-specific AI calls
-3. universalDataAnalysisService - Data analysis engine
-4. clientService - Client data management
-5. Asset loading services - Template/wireframe management
-6. SaveButton component - Content persistence
-7. ExcelJS - File processing capabilities
+2. clientService - Client data management
+3. Asset loading services - Template/wireframe management
+4. SaveButton component - Content persistence
+5. ExcelJS - File processing capabilities
 
 #### Architectural Principles
 1. Consistent State Management: All tools follow the same conversation/session pattern
@@ -3122,8 +2725,7 @@ const categories = [
   { id: 'email-generator', name: 'Email Generator', icon: Mail },
   { id: 'landing-page-builder', name: 'Landing Page Builder', icon: Globe },
   { id: 'persona-builder', name: 'Persona Builder', icon: User },
-  { id: 'content-creator', name: 'Content Creator', icon: FileText },
-  { id: 'ads-analysis', name: 'Ads Analysis', icon: BarChart3 }
+  { id: 'content-creator', name: 'Content Creator', icon: FileText }
 ];
 ```
 
@@ -3201,7 +2803,7 @@ const copyEditedPrompt = async (promptId: string) => {
 ```
 
 ### Data Structure
-Prompt Categories (12 prompts each, 108 total)
+Prompt Categories (12 prompts each, 84 total)
 - marketing-calendar: Q4 campaigns, product launches, annual strategies, events, seasonal campaigns, multi-channel coordination, lifecycle marketing, competitive response, partnership marketing, crisis communication, budget optimization, ROI tracking
 - social-calendar: Instagram growth, LinkedIn B2B, TikTok viral content, Facebook communities, Twitter thought leadership, YouTube series, Pinterest visual marketing, multi-platform repurposing, crisis management, influencer collaboration, social commerce, community management
 - email-calendar: Welcome series automation, monthly newsletters, abandoned cart recovery, customer re-engagement, product launch campaigns, seasonal promotions, lifecycle journeys, event-driven campaigns, educational courses, feedback surveys, VIP loyalty programs, performance optimization
@@ -3209,7 +2811,6 @@ Prompt Categories (12 prompts each, 108 total)
 - landing-page-builder: SaaS products, lead magnets, e-commerce products, event registration, service businesses, mobile apps, online courses, startup MVPs, coaching businesses, agency services, non-profit donations, multi-platform optimization
 - persona-builder: B2B decision makers, consumer brands, tech early adopters, millennial professionals, small business owners, Gen Z consumers, healthcare professionals, remote workers, senior executives, education sector, fitness enthusiasts, creative professionals
 - content-creator: SEO blog posts, social media calendars, case studies, newsletter content, video scripts, white papers, product descriptions, press releases, podcast episodes, infographics, webinar content, content repurposing strategies
-- ads-analysis: Google Ads performance, Facebook audience analysis, multi-platform ROI, e-commerce advertising, B2B lead generation, creative A/B testing, competitive intelligence, retargeting optimization, video advertising, mobile performance, seasonal trends, attribution modeling
 
 ### UI Components
 #### Search and Filter Interface
@@ -3244,3 +2845,175 @@ Prompt Categories (12 prompts each, 108 total)
 - Consistent spacing and typography
 - Hover states and transitions
 - Mobile-responsive design with flexbox wrapping
+
+## Client Management System
+- Multi-client support with client switching
+- Client profiles with company info, industry, target audience
+- Brand guidelines and goals tracking
+- Client-specific content generation and context
+
+## AI Integration
+- Claude API integration for content generation
+- Conversation-based AI interactions with memory
+- Client context awareness in all AI prompts
+- Token management and session tracking
+
+## Detailed File Breakdown
+### Frontend Core Files
+#### App.tsx - Main application orchestrator with:
+- Authentication state management
+- Client management and switching
+- Navigation and routing logic
+- Modal state management
+- Theme switching (dark/light)
+
+#### main.tsx - Application entry point with React 18 setup
+#### index.css & App.css - Complete styling system with CSS variables for theming
+
+### Components Structure
+#### Layout Components
+- Header.tsx - User profile, client switcher, theme toggle, navigation
+- Sidebar.tsx - Navigation menu with organized tool sections
+- Sidebar.css - Always-dark sidebar styling with responsive collapse
+
+#### Common Components
+- DownloadButton.tsx - Export functionality (PDF, Excel, Word)
+- MultiSelect.tsx - Multi-option selection component
+- SaveButton.tsx - Universal save-to-assets functionality with 100-item limit
+
+#### Modal Components
+- AddClientModal.tsx - Comprehensive client creation form
+- EditClientModal.tsx - Client information editing
+- DeleteClientModal.tsx - Client deletion with stats display
+- EditModal.tsx - Calendar content editing
+- EditPersonaModal.tsx - Persona data editing
+- GuidelinesModal.tsx - AI prompt guidelines and examples
+- PreviewModal.tsx - Universal preview for templates, wireframes, assets
+
+#### Page Components (Tools)
+##### Dashboard.tsx
+- Real-time analytics and stats cards
+- Content breakdown charts
+- Recent activities and personas
+- Quick action navigation
+
+##### Marketing/Social/Email Calendars
+- Conversation-based AI content planning
+- Platform-specific content generation
+- Token-based session management (50k limit)
+- Calendar visualization with event management
+
+##### EmailGenerator.tsx
+- Template and wireframe integration
+- Desktop/mobile preview modes
+- Client context-aware email generation
+- HTML email creation and editing
+
+##### LandingPageBuilder.tsx
+- Multi-platform support (HTML, React, Vue, Shopify, WordPress)
+- Template/wireframe system
+- Code extraction and ZIP package downloads
+- Platform-specific optimizations
+
+##### PersonaBuilder.tsx
+- AI-powered persona generation
+- Structured demographic and behavioral data
+- Client context integration
+- Comprehensive persona profiles
+
+##### ContentCreator.tsx
+- 12 content types (blog, social, email, case studies, etc.)
+- Conversation memory system
+- Client content saving
+- Export capabilities
+
+##### SavedAssets.tsx
+- Asset library management (100-item limit)
+- Search and filtering by type
+- Asset reuse across tools
+- Download and preview capabilities
+
+##### PromptLibrary.tsx
+- 84 categorized marketing prompts
+- Search and filtering functionality
+- Copy-to-clipboard integration
+- Edit mode for prompt customization
+
+##### Settings.tsx
+- User profile management
+- Password change functionality
+- API key configuration
+- Account verification status
+
+#### Service Layer
+##### apiService.ts - Central API management:
+- Claude AI integration
+- Client CRUD operations
+- Saved assets management
+- Authentication endpoints
+- Content generation with conversation history
+
+##### authService.ts - Authentication management:
+- Token storage and validation
+- Session management
+- User profile operations
+- Auto-logout on token expiry
+
+##### clientService.ts - Client data management:
+- Client CRUD with validation
+- Content management per client
+- Client statistics and analytics
+- Search and filtering capabilities
+
+##### exportService.ts - Export functionality:
+- PDF generation with jsPDF
+- Excel exports with ExcelJS
+- Word document creation
+- Calendar and persona exports
+
+##### assetLoader.js - Template/wireframe loading:
+- Dynamic asset loading from file system
+- HTML content retrieval
+- Asset validation and filtering
+- Category-based organization
+
+### Assets Structure
+#### Template System:
+- Email Templates: 12 templates across 4 categories (announcement, ecommerce, newsletter, promotional)
+- Email Wireframes: 10 wireframes across 5 categories
+- Landing Page Templates: 8 templates across 3 categories (agency, ecommerce, saas)
+- Landing Page Wireframes: 13 wireframes across 5 categories
+
+#### Each template includes:
+- metadata.json with title, description, category info
+- HTML template files
+- Category-based organization
+
+## Key Technical Features
+### Architecture Highlights
+- No external CSS frameworks - Custom CSS with variables
+- Client-scoped content - All content tied to specific clients
+- Session management - Token-based conversations with limits
+- Template system - Reusable email and landing page assets
+- Export capabilities - PDF, Excel, Word, HTML exports
+- Responsive design - Mobile-first approach
+- Theme system - Dark/light mode with persistence
+
+### AI Integration Features
+- Conversation memory - Maintains context across interactions
+- Client context - Incorporates client info in all AI prompts
+- Token management - 50k token limit with usage tracking
+- Multi-modal AI - Different prompt strategies per tool
+
+### Data Management
+- Client management - Full CRUD with industry/goal tracking
+- Asset library - 100-item limit with type-based organization
+- Template system - Pre-built marketing assets
+- Export system - Multiple format support
+
+### User Experience
+- Single page application - No page reloads
+- Modal-based workflows - Consistent interaction patterns
+- Real-time feedback - Loading states and progress tracking
+- Error handling - Comprehensive error management
+- Keyboard shortcuts - Enhanced productivity features
