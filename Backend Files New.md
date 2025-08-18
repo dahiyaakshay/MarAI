@@ -300,7 +300,7 @@ const VALID_CONTENT_TYPES = [
   'landing_page', 'saas_landing', 'ecommerce_landing',
   'persona', 'buyer_persona', 'social_calendar',
   'marketing_calendar', 'content_creator', 'blog_post',
-  'ads_analysis', 'prompt_library', 'other'
+  'prompt_library', 'other'
 ] as const;
 ```
 
@@ -333,7 +333,7 @@ interface SavedAsset {
 }
 
 type AssetType = 'marketing' | 'social' | 'email' | 'email-built' | 
-                'landing' | 'persona' | 'content' | 'ads';
+                'landing' | 'persona' | 'content';
 ```
 
 ### API Request/Response Types
@@ -1002,7 +1002,7 @@ Table: saved_assets
 - content - TEXT NOT NULL (minimum 1 char)
 - metadata - JSONB DEFAULT '{}'
 
-- Asset Types: 'marketing', 'social', 'email', 'email-built', 'landing', 'persona', 'content', 'ads'
+- Asset Types: 'marketing', 'social', 'email', 'email-built', 'landing', 'persona', 'content'
 
 ### Key Features:
 ```sql
@@ -1073,7 +1073,6 @@ Table: client_content
 - Personas: 'persona', 'buyer_persona', 'customer_persona'
 - Calendars: 'social_calendar', 'marketing_calendar', 'email_calendar'
 - Content: 'content_creator', 'blog_post', 'social_post', 'case_study', 'whitepaper', 'press_release'
-- Analysis: 'ads_analysis', 'campaign_analysis'
 - Prompts: 'prompt_library', 'custom_prompt'
 
 ### Advanced Features:
@@ -1204,7 +1203,6 @@ export const VALID_CONTENT_TYPES = [
   'persona', 'buyer_persona', 'customer_persona',
   'social_calendar', 'marketing_calendar', 'email_calendar',
   'content_creator', 'blog_post', 'social_post', 'case_study', 'whitepaper', 'press_release',
-  'ads_analysis', 'campaign_analysis',
   'prompt_library', 'custom_prompt',
   'other'
 ] as const;
@@ -1281,7 +1279,7 @@ export interface SavedAsset {
 
 export type AssetType = 
   | 'marketing' | 'social' | 'email' | 'email-built' 
-  | 'landing' | 'persona' | 'content' | 'ads';
+  | 'landing' | 'persona' | 'content';
 ```
 
 ### Configuration
@@ -1305,8 +1303,7 @@ export const ASSET_TYPE_LABELS: Record<AssetType, string> = {
   'email-built': 'Emails Built',
   'landing': 'Landing Pages',
   'persona': 'Personas',
-  'content': 'Content',
-  'ads': 'Ads'
+  'content': 'Content'
 };
 ```
 
@@ -1774,7 +1771,7 @@ router.use(authenticateUser); // or validateApiKeys for generate.ts
 
 ### src/models/SavedAsset.ts
 - Asset Management: Personal content library (100-item limit)
-- Asset Types: Marketing, social, email, landing, persona, content, ads
+- Asset Types: Marketing, social, email, landing, persona, content
 - Search Functionality: Title and content search with filtering
 - Usage Statistics: Asset count tracking by type
 
@@ -1879,7 +1876,7 @@ router.use(authenticateUser); // or validateApiKeys for generate.ts
 - API Responses: Standardized response formats
 
 ### Content Type System
-- 20+ Content Types: Emails, landing pages, personas, calendars, analysis
+- 20+ Content Types: Emails, landing pages, personas, calendars
 - Validation: Strict content type checking
 - Metadata: Flexible additional data storage
 
