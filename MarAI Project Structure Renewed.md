@@ -453,7 +453,6 @@
     │
     ├───components
     │   ├───Common
-    │   │       AnalysisReport.tsx
     │   │       DownloadButton.tsx
     │   │       MultiSelect.tsx
     │   │       SaveButton.tsx
@@ -473,7 +472,6 @@
     │   │       PreviewModal.tsx
     │   │
     │   └───Pages
-    │           AdsAnalysis.tsx
     │           Auth.tsx
     │           ContentCreator.tsx
     │           Dashboard.tsx
@@ -492,8 +490,4 @@
     │       assetLoader.js
     │       authService.ts
     │       clientService.ts
-    │       dataAnalysisService.ts
-    │       exportService.ts
-    │
-    └───utils
-            analysisUtils.ts</pre>
+    │       exportService.ts</pre>
